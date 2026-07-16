@@ -21,7 +21,8 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings, OUTPUT_DIR
 from app.database import init_db, close_db
-from app.routes import health, generate, tasks
+from app.errors import AppError
+from app.routes import health, generate, tasks, stats
 
 # ---------------------------------------------------------------------------
 # 日志配置
@@ -94,14 +95,32 @@ app.mount("/output", StaticFiles(directory=str(OUTPUT_DIR)), name="output")
 # ---------------------------------------------------------------------------
 
 
+@app.exception_handler(AppError)
+async def app_error_handler(request: Request, exc: AppError):
+    """业务异常 — 根据子类返回对应 status_code"""
+    logger.warning(
+        f"业务异常 [{exc.error_code}] {request.method} {request.url.path}: {exc.message}"
+    )
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "detail": exc.message,
+            "error_code": exc.error_code,
+            "status_code": exc.status_code,
+        },
+    )
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
+    """未预期的内部错误"""
     logger.exception(f"未处理异常: {request.method} {request.url.path}")
     return JSONResponse(
         status_code=500,
         content={
             "detail": "Internal server error",
             "error_code": "INTERNAL_ERROR",
+            "status_code": 500,
         },
     )
 
@@ -113,6 +132,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 app.include_router(health.router)
 app.include_router(generate.router)
 app.include_router(tasks.router)
+app.include_router(stats.router, prefix="/api/stats", tags=["Stats"])
 
 
 # ---------------------------------------------------------------------------

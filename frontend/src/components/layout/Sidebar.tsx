@@ -7,8 +7,11 @@ import {
   Sun,
   Moon,
   Sparkles,
+  Wifi,
+  WifiOff,
 } from 'lucide-react'
 import { useThemeStore } from '../../stores/themeStore'
+import { getApiMode } from '../../services/api'
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: '工作台' },
@@ -20,6 +23,7 @@ const navItems = [
 export default function Sidebar() {
   const location = useLocation()
   const { isDark, toggle } = useThemeStore()
+  const isMock = getApiMode() === 'mock'
 
   const isActive = (path: string) => {
     if (path === '/') return location.pathname === '/'
@@ -76,6 +80,21 @@ export default function Sidebar() {
             </>
           )}
         </button>
+
+        {/* API 模式指示器 */}
+        <div className="flex items-center gap-2 px-3 py-2 mt-1">
+          {isMock ? (
+            <>
+              <WifiOff className="w-3.5 h-3.5 text-[var(--color-accent)]" />
+              <span className="text-xs text-[var(--color-text-muted)]">Mock 模式</span>
+            </>
+          ) : (
+            <>
+              <Wifi className="w-3.5 h-3.5 text-[var(--color-success)]" />
+              <span className="text-xs text-[var(--color-text-muted)]">API 在线</span>
+            </>
+          )}
+        </div>
       </div>
     </aside>
   )

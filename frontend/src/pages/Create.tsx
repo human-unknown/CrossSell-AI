@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   ArrowLeft,
   Sparkles,
@@ -18,7 +18,6 @@ import {
   Video,
 } from 'lucide-react'
 import { useCreateStore } from '../stores/createStore'
-import { getTaskResult, simulateProgress } from '../services/api'
 import type {
   TargetMarket,
   TargetPlatform,
@@ -63,17 +62,15 @@ export default function Create() {
     setProductInfo,
     progress,
     isGenerating,
-    setProgress,
-    setIsGenerating,
     result,
-    setResult,
     goToStep,
+    startGeneration,
     reset,
   } = useCreateStore()
 
   const cancelRef = useRef<(() => void) | null>(null)
 
-  // Clean up simulation on unmount
+  // Clean up on unmount
   useEffect(() => {
     return () => {
       cancelRef.current?.()
@@ -86,24 +83,8 @@ export default function Create() {
     if (productInfo.targetPlatforms.length === 0) return
     if (productInfo.contentTypes.length === 0) return
 
-    goToStep(2)
-    setIsGenerating(true)
-
-    const cancel = simulateProgress(
-      (prog) => setProgress(prog),
-      async () => {
-        setIsGenerating(false)
-        // Fetch mock result
-        const taskId = `task_${Date.now()}`
-        const res = await getTaskResult(taskId)
-        setResult(res)
-        goToStep(3)
-        const currentProgress = useCreateStore.getState().progress
-        if (currentProgress) {
-          setProgress({ ...currentProgress, status: 'completed' })
-        }
-      }
-    )
+    // Store handles both real API polling & mock simulation internally
+    const cancel = startGeneration()
     cancelRef.current = cancel
   }
 

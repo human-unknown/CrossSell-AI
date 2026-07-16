@@ -102,3 +102,55 @@ export interface WeeklyStats {
   totalTasks: number
   completedTasks: number
 }
+
+// ============ 投放策略 ============
+
+export interface ChannelRecommendation {
+  channel: string
+  rating: number          // 1-5 星标
+  dailyBudget: number     // 美元
+  estimatedROAS: string   // 如 "2.8-4.2x"
+  reason: string
+}
+
+export interface BudgetAllocation {
+  channel: string
+  value: number           // 百分比 or 绝对值
+}
+
+export interface StrategyData {
+  recommendedChannels: ChannelRecommendation[]
+  budgetAllocation: BudgetAllocation[]
+  keySuggestions: string[]
+}
+
+// ============ 数据分析 ============
+
+export interface AnalyticsSummary {
+  totalContent: number
+  videoCount: number
+  copyCount: number
+  strategyCount: number
+}
+
+export interface PlatformDistribution {
+  platform: string
+  count: number
+}
+
+export interface AnalyticsTaskItem {
+  id: string
+  productName: string
+  platformCount: number
+  marketCount: number
+  createdAt: string
+  status: 'completed' | 'generating' | 'failed'
+}
+
+export interface AnalyticsData {
+  summary: AnalyticsSummary
+  platformDistribution: PlatformDistribution[]
+  recentTasks: AnalyticsTaskItem[]
+}
+
+export type TimeRange = '本周' | '本月' | '本季度'

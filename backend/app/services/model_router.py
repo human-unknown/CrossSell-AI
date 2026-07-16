@@ -188,16 +188,36 @@ class ModelRouterClient:
 
         prompt 中需要明确要求模型输出 JSON 格式。
         """
+        import re
+
         text = await self.chat(messages, model=model, temperature=temperature)
-        # 尝试提取 JSON 块
         text = text.strip()
+
+        # 去除 markdown 代码块标记
         if text.startswith("```json"):
             text = text[7:]
-        if text.startswith("```"):
+        elif text.startswith("```"):
             text = text[3:]
         if text.endswith("```"):
             text = text[:-3]
-        return json.loads(text.strip())
+        text = text.strip()
+
+        # 去除 JSON 中非法的控制字符（deepseek-r1 等模型可能混入）
+        # 保留 \n, \t, \r 这些 JSON 合法的转义
+        text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", text)
+
+        # 尝试解析
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            # 尝试提取第一个 { } 或 [ ] 块
+            match = re.search(r"(\{.*\}|\[.*\])", text, re.DOTALL)
+            if match:
+                try:
+                    return json.loads(match.group(1))
+                except json.JSONDecodeError:
+                    pass
+            raise
 
     # ------------------------------------------------------------------
     # 图片生成

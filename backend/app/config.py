@@ -26,18 +26,18 @@ class Settings(BaseSettings):
     # ---- 数据库 ----
     DATABASE_URL: str = f"sqlite+aiosqlite:///{BASE_DIR / 'crosssell.db'}"
 
-    # ---- Model Router API (阿里云百炼) ----
-    MODEL_ROUTER_BASE_URL: str = "https://model-router.edu-aliyun.com/v1"
-    MODEL_ROUTER_API_KEY: str = ""  # 赛方发放，踩点时可用阿里云百炼免费额度
+    # ---- Model Router API (阿里云百炼国内) ----
+    MODEL_ROUTER_BASE_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    MODEL_ROUTER_API_KEY: str = ""  # 阿里云百炼控制台获取的 API Key
 
-    # ---- 常用模型 ----
-    TEXT_MODEL: str = "qwen/qwen3.7-max"
-    FAST_TEXT_MODEL: str = "qwen/qwen3.5-flash"
-    REASONING_MODEL: str = "qwen/deepseek-r1"
-    TTS_MODEL: str = "qwen/qwen3-tts-instruct-flash"
-    IMAGE_MODEL: str = "qwen/wan2.7-image-pro"
-    VIDEO_MODEL: str = "qwen/wan2.7-t2v"
-    VISION_MODEL: str = "qwen/qwen3-vl-plus"
+    # ---- 常用模型 (阿里云百炼兼容模式原生ID，不含 qwen/ 前缀) ----
+    TEXT_MODEL: str = "qwen-max"          # 高质量文案/脚本
+    FAST_TEXT_MODEL: str = "qwen-turbo"   # 快速原型验证
+    REASONING_MODEL: str = "deepseek-r1"  # 复杂策略分析
+    TTS_MODEL: str = "cosyvoice-v1"       # 语音合成（需达摩院原生API）
+    IMAGE_MODEL: str = "wan2.1-t2i-turbo" # 图片生成（需达摩院原生API）
+    VIDEO_MODEL: str = "wan2.1-t2v-turbo" # 视频生成（需达摩院原生API）
+    VISION_MODEL: str = "qwen-vl-plus"    # 视觉理解
 
     # ---- API 限流 / 重试 ----
     MAX_RETRIES: int = 3

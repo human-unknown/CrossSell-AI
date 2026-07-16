@@ -15,7 +15,7 @@ class TestSettings:
         assert settings.APP_NAME == "CrossSell AI"
         assert settings.APP_VERSION == "0.1.0"
         assert "sqlite" in settings.DATABASE_URL.lower()
-        assert settings.TEXT_MODEL == "qwen/qwen3.7-max"
+        assert settings.TEXT_MODEL == "qwen-max"
 
     def test_get_settings_singleton(self):
         """get_settings 应返回单例"""

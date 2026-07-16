@@ -1,0 +1,1127 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CrossSell AI — 低保真原型 v0.1</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* ===== Design Tokens ===== */
+:root {
+  --primary: #6366f1;
+  --primary-light: #818cf8;
+  --primary-dark: #4f46e5;
+  --accent: #f59e0b;
+  --success: #10b981;
+  --danger: #ef4444;
+  --bg: #f8fafc;
+  --bg-card: #ffffff;
+  --text: #1e293b;
+  --text-muted: #64748b;
+  --border: #e2e8f0;
+  --sidebar-w: 240px;
+  --radius: 12px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+  --font: 'Inter', -apple-system, sans-serif;
+}
+.dark {
+  --primary: #818cf8;
+  --primary-light: #a5b4fc;
+  --primary-dark: #6366f1;
+  --accent: #fbbf24;
+  --bg: #0f172a;
+  --bg-card: #1e293b;
+  --text: #f1f5f9;
+  --text-muted: #94a3b8;
+  --border: #334155;
+}
+
+/* ===== Reset & Base ===== */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font);background:var(--bg);color:var(--text);line-height:1.5;-webkit-font-smoothing:antialiased}
+.app{display:flex;min-height:100vh}
+
+/* ===== Sidebar ===== */
+.sidebar{
+  position:fixed;left:0;top:0;bottom:0;width:var(--sidebar-w);
+  background:var(--bg-card);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;z-index:50;
+}
+.sidebar-logo{
+  display:flex;align-items:center;gap:10px;padding:0 20px;height:64px;
+  border-bottom:1px solid var(--border);flex-shrink:0;
+}
+.sidebar-logo .logo-icon{
+  width:34px;height:34px;border-radius:10px;
+  background:linear-gradient(135deg,var(--primary),#a855f7);
+  display:flex;align-items:center;justify-content:center;
+  color:#fff;font-size:16px;font-weight:700;
+}
+.sidebar-logo .logo-text{font-weight:700;font-size:17px;letter-spacing:-0.3px}
+.sidebar-nav{flex:1;padding:12px;display:flex;flex-direction:column;gap:2px;overflow-y:auto}
+.nav-item{
+  display:flex;align-items:center;gap:12px;padding:10px 14px;
+  border-radius:10px;font-size:14px;font-weight:500;cursor:pointer;
+  color:var(--text-muted);transition:all .15s;border:none;background:none;width:100%;text-align:left;
+}
+.nav-item:hover{background:var(--bg);color:var(--text)}
+.nav-item.active{background:var(--primary);color:#fff;box-shadow:0 2px 8px rgba(99,102,241,0.3)}
+.nav-icon{width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:16px}
+.sidebar-footer{padding:12px;border-top:1px solid var(--border)}
+.theme-btn{
+  display:flex;align-items:center;gap:12px;width:100%;padding:10px 14px;
+  border-radius:10px;font-size:13px;font-weight:500;cursor:pointer;
+  color:var(--text-muted);background:none;border:none;transition:all .15s;
+}
+.theme-btn:hover{background:var(--bg);color:var(--text)}
+
+/* ===== Main ===== */
+.main{margin-left:var(--sidebar-w);flex:1;padding:28px 32px;overflow-y:auto}
+.page{display:none;animation:fadeInUp .35s ease-out}
+.page.active{display:block}
+@keyframes fadeInUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+/* ===== Typography ===== */
+h1{font-size:24px;font-weight:700;line-height:1.3}
+h2{font-size:18px;font-weight:600}
+h3{font-size:15px;font-weight:600}
+.subtitle{font-size:14px;color:var(--text-muted);margin-top:2px}
+.section-label{
+  font-size:11px;font-weight:600;text-transform:uppercase;
+  letter-spacing:0.8px;color:var(--text-muted);margin-bottom:8px;
+}
+
+/* ===== Cards ===== */
+.card{
+  background:var(--bg-card);border:1px solid var(--border);
+  border-radius:var(--radius);padding:20px;box-shadow:var(--shadow);
+}
+.card-header{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border);
+}
+.card-header h3{margin:0}
+
+/* ===== Grid system ===== */
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.grid-2{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+.grid-5{display:grid;grid-template-columns:2fr 3fr;gap:20px}
+
+/* ===== Stat Card ===== */
+.stat-card{
+  background:var(--bg-card);border:1px solid var(--border);
+  border-radius:var(--radius);padding:18px 20px;box-shadow:var(--shadow);
+  display:flex;align-items:flex-start;justify-content:space-between;
+}
+.stat-card .stat-label{font-size:13px;color:var(--text-muted)}
+.stat-card .stat-value{font-size:32px;font-weight:800;margin-top:4px;line-height:1}
+.stat-card .stat-unit{font-size:16px;font-weight:400;color:var(--text-muted);margin-left:4px}
+.stat-icon{
+  width:42px;height:42px;border-radius:10px;display:flex;
+  align-items:center;justify-content:center;font-size:20px;color:#fff;flex-shrink:0;
+}
+.stat-icon.blue{background:linear-gradient(135deg,#3b82f6,#06b6d4)}
+.stat-icon.green{background:linear-gradient(135deg,#10b981,#14b8a6)}
+.stat-icon.amber{background:linear-gradient(135deg,#f59e0b,#f97316)}
+.stat-icon.purple{background:linear-gradient(135deg,#8b5cf6,#a855f7)}
+
+/* ===== CTA Button ===== */
+.cta-card{
+  background:linear-gradient(135deg,var(--primary),#a855f7);
+  border-radius:var(--radius);padding:22px 28px;cursor:pointer;
+  color:#fff;display:flex;align-items:center;justify-content:space-between;
+  transition:all .2s;box-shadow:0 4px 16px rgba(99,102,241,0.25);
+}
+.cta-card:hover{transform:translateY(-1px);box-shadow:0 6px 24px rgba(99,102,241,0.35)}
+.cta-card h2{font-size:18px;margin:0 0 4px}
+.cta-card p{opacity:.85;font-size:14px}
+.cta-badge{
+  display:flex;align-items:center;gap:8px;background:rgba(255,255,255,0.2);
+  border-radius:999px;padding:8px 18px;font-weight:600;font-size:14px;
+  white-space:nowrap;
+}
+
+/* ===== Task List ===== */
+.task-row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:13px 20px;transition:background .15s;
+}
+.task-row:hover{background:var(--bg)}
+.task-row + .task-row{border-top:1px solid var(--border)}
+.task-info{display:flex;align-items:center;gap:12px;min-width:0}
+.task-name{font-weight:500;font-size:14px}
+.task-meta{font-size:12px;color:var(--text-muted);margin-top:2px}
+
+/* ===== Status Badges ===== */
+.badge{
+  display:inline-flex;align-items:center;gap:5px;padding:3px 10px;
+  border-radius:999px;font-size:11px;font-weight:600;
+}
+.badge-success{background:#ecfdf5;color:#059669}
+.badge-warning{background:#fffbeb;color:#d97706}
+.badge-error{background:#fef2f2;color:#dc2626}
+.dark .badge-success{background:#064e3b30;color:#34d399}
+.dark .badge-warning{background:#78350f30;color:#fbbf24}
+.dark .badge-error{background:#7f1d1d30;color:#f87171}
+
+/* ===== Form Elements ===== */
+.form-group{margin-bottom:20px}
+.form-label{
+  display:block;font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px;
+}
+.form-label .required{color:var(--danger);margin-left:2px}
+.form-input{
+  width:100%;padding:10px 14px;border:1px solid var(--border);
+  border-radius:10px;background:var(--bg);color:var(--text);
+  font-size:14px;font-family:var(--font);transition:all .15s;
+}
+.form-input:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(99,102,241,0.1)}
+.form-input.error{border-color:var(--danger);box-shadow:0 0 0 3px rgba(239,68,68,0.1)}
+.form-input::placeholder{color:var(--text-muted);opacity:.6}
+.form-textarea{resize:none;min-height:100px}
+.field-error{font-size:12px;color:var(--danger);margin-top:4px;display:none}
+.field-error.show{display:block}
+
+/* ===== Tag Buttons ===== */
+.tag-group{display:flex;flex-wrap:wrap;gap:8px}
+.tag-btn{
+  padding:8px 16px;border:1px solid var(--border);border-radius:10px;
+  font-size:13px;font-weight:500;cursor:pointer;transition:all .15s;
+  background:var(--bg);color:var(--text);
+}
+.tag-btn:hover{border-color:var(--primary);color:var(--primary)}
+.tag-btn.selected{background:var(--primary);color:#fff;border-color:var(--primary);box-shadow:0 2px 6px rgba(99,102,241,0.2)}
+
+/* ===== Buttons ===== */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  padding:10px 20px;border-radius:10px;font-size:14px;font-weight:600;
+  border:none;cursor:pointer;transition:all .15s;font-family:var(--font);
+}
+.btn-primary{
+  background:var(--primary);color:#fff;box-shadow:0 2px 8px rgba(99,102,241,0.25);
+}
+.btn-primary:hover{box-shadow:0 4px 16px rgba(99,102,241,0.35);transform:translateY(-1px)}
+.btn-primary:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none}
+.btn-full{width:100%;padding:14px;font-size:16px;border-radius:12px}
+.btn-ghost{padding:6px 12px;background:none;color:var(--text-muted);font-size:13px}
+.btn-ghost:hover{color:var(--primary);background:var(--bg)}
+.btn-xs{font-size:12px;padding:4px 10px;border-radius:6px}
+
+/* ===== Step Progress ===== */
+.step-bar{
+  display:flex;align-items:center;gap:0;margin-bottom:24px;
+}
+.step-item{
+  display:flex;align-items:center;gap:10px;padding:10px 20px;
+  border-radius:999px;font-size:14px;font-weight:600;transition:all .3s;
+  background:var(--bg);color:var(--text-muted);
+}
+.step-item.active{background:var(--primary);color:#fff;box-shadow:0 2px 8px rgba(99,102,241,0.25)}
+.step-item.done{background:#ecfdf5;color:#059669}
+.dark .step-item.done{background:#064e3b30;color:#34d399}
+.step-dot{
+  width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:11px;font-weight:700;border:2px solid var(--border);
+}
+.step-item.active .step-dot{border-color:rgba(255,255,255,0.3);background:rgba(255,255,255,0.2)}
+.step-item.done .step-dot{border-color:#10b981;background:#10b981;color:#fff}
+.step-arrow{color:var(--border);margin:0 2px;font-size:18px}
+
+/* ===== Progress Steps (Vertical) ===== */
+.progress-list{padding:20px}
+.progress-step{
+  display:flex;align-items:flex-start;gap:14px;padding:16px 0;position:relative;
+}
+.progress-step + .progress-step{border-top:1px solid var(--border)}
+.progress-icon{
+  width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:16px;flex-shrink:0;background:var(--border);color:var(--text-muted);
+}
+.progress-icon.done{background:#10b981;color:#fff}
+.progress-icon.active{background:var(--primary);color:#fff;box-shadow:0 0 0 4px rgba(99,102,241,.2)}
+.progress-body h4{font-size:14px;margin-bottom:3px;color:var(--text)}
+.progress-body p{font-size:12px;color:var(--text-muted)}
+.progress-bar-wrap{height:3px;background:var(--border);border-radius:3px;margin-top:8px;overflow:hidden}
+.progress-bar-fill{height:100%;background:var(--primary);border-radius:3px;animation:shimmer 2s infinite}
+@keyframes shimmer{0%{opacity:0.6}50%{opacity:1}100%{opacity:0.6}}
+
+/* ===== Tabs ===== */
+.tab-bar{display:flex;gap:2px;background:var(--bg);border-radius:10px;padding:3px;width:fit-content}
+.tab-btn{
+  padding:8px 18px;border-radius:8px;font-size:13px;font-weight:500;
+  cursor:pointer;border:none;background:none;color:var(--text-muted);
+  transition:all .15s;display:flex;align-items:center;gap:6px;
+}
+.tab-btn.active{background:var(--bg-card);color:var(--text);box-shadow:var(--shadow)}
+.tab-count{font-size:11px;padding:1px 6px;border-radius:999px;background:var(--primary);color:#fff}
+
+/* ===== Video Preview ===== */
+.video-preview{
+  background:#000;border-radius:var(--radius);aspect-ratio:9/16;max-width:320px;
+  display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;
+}
+.video-preview .play-btn{
+  width:56px;height:56px;border-radius:50%;background:rgba(255,255,255,0.9);
+  display:flex;align-items:center;justify-content:center;font-size:24px;color:var(--primary);
+  cursor:pointer;transition:transform .15s;
+}
+.video-preview .play-btn:hover{transform:scale(1.1)}
+
+/* ===== Platform Cards ===== */
+.platform-card{
+  padding:14px;border:1px solid var(--border);border-radius:10px;
+  text-align:left;cursor:pointer;transition:all .15s;background:var(--bg-card);
+  font-family:var(--font);width:100%;
+}
+.platform-card:hover{border-color:var(--primary)}
+.platform-card.active{border-color:var(--primary);background:rgba(99,102,241,0.04)}
+.dark .platform-card.active{background:rgba(129,140,248,0.08)}
+.platform-card .plat-name{font-weight:600;font-size:13px;color:var(--text)}
+.platform-card .plat-meta{font-size:11px;color:var(--text-muted);margin-top:3px}
+.platform-card .plat-badge{font-size:10px;color:var(--primary);font-weight:600;margin-top:4px}
+
+/* ===== Pie Chart Placeholder ===== */
+.pie-placeholder{
+  width:180px;height:180px;border-radius:50%;background:conic-gradient(
+    #6366f1 0% 45%, #f59e0b 45% 70%, #10b981 70% 85%, #ef4444 85% 100%
+  );margin:0 auto;
+}
+.pie-legend{display:flex;flex-wrap:wrap;gap:12px;margin-top:12px;justify-content:center}
+.pie-legend-item{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-muted)}
+.pie-legend-dot{width:10px;height:10px;border-radius:3px;flex-shrink:0}
+
+/* ===== Table ===== */
+.data-table{width:100%;border-collapse:collapse;font-size:13px}
+.data-table th{
+  text-align:left;padding:12px 16px;font-weight:600;font-size:11px;
+  text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);
+  border-bottom:1px solid var(--border);background:var(--bg);
+}
+.data-table td{padding:12px 16px;border-bottom:1px solid var(--border)}
+.data-table tr:hover td{background:var(--bg)}
+
+/* ===== Annotation ===== */
+.annotation{
+  position:relative;border:2px dashed #f59e0b;border-radius:8px;
+  padding:2px;margin:4px 0;
+}
+.annotation::after{
+  content:attr(data-note);
+  position:absolute;top:-24px;left:0;
+  font-size:11px;font-weight:600;color:#f59e0b;
+  white-space:nowrap;pointer-events:none;
+}
+
+/* ===== Time Range Selector ===== */
+.time-pills{display:flex;gap:2px;background:var(--bg);border-radius:10px;padding:3px}
+.time-pill{
+  padding:8px 16px;border-radius:8px;font-size:13px;font-weight:500;
+  cursor:pointer;border:none;background:none;color:var(--text-muted);transition:all .15s;
+}
+.time-pill.active{background:var(--bg-card);color:var(--text);box-shadow:var(--shadow)}
+
+/* ===== Select ===== */
+.form-select{
+  padding:10px 14px;border:1px solid var(--border);border-radius:10px;
+  background:var(--bg);color:var(--text);font-size:14px;font-family:var(--font);
+  cursor:pointer;min-width:200px;
+}
+
+/* ===== Channel Card ===== */
+.channel-card{
+  background:var(--bg-card);border:1px solid var(--border);
+  border-radius:var(--radius);padding:18px 20px;box-shadow:var(--shadow);
+}
+.channel-card .ch-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.channel-card .ch-name{font-weight:700;font-size:15px;display:flex;align-items:center;gap:8px}
+.channel-card .ch-priority{font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px}
+.ch-priority.p1{background:#fef2f2;color:#dc2626}
+.ch-priority.p2{background:#fffbeb;color:#d97706}
+.ch-priority.p3{background:#eff6ff;color:#2563eb}
+.dark .ch-priority.p1{background:#7f1d1d30;color:#f87171}
+.dark .ch-priority.p2{background:#78350f30;color:#fbbf24}
+.dark .ch-priority.p3{background:#1e3a5f30;color:#60a5fa}
+.channel-card .ch-metrics{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.channel-card .ch-metric{
+  background:var(--bg);border-radius:10px;padding:12px 14px;
+}
+.channel-card .ch-metric-label{font-size:11px;color:var(--text-muted);margin-bottom:3px}
+.channel-card .ch-metric-value{font-size:18px;font-weight:700;color:var(--text)}
+.channel-card .ch-reason{font-size:12px;color:var(--text-muted);line-height:1.6}
+
+/* ===== Responsive helpers ===== */
+.flex-between{display:flex;align-items:center;justify-content:space-between}
+.gap-16{gap:16px}
+.gap-20{gap:20px}
+.gap-8{gap:8px}
+.mb-12{margin-bottom:12px}
+.mb-16{margin-bottom:16px}
+.mb-20{margin-bottom:20px}
+.mb-24{margin-bottom:24px}
+.mt-4{margin-top:4px}
+.mt-8{margin-top:8px}
+.mt-16{margin-top:16px}
+.w-full{width:100%}
+
+/* ===== Icon SVGs (inline) ===== */
+.icon-svg{display:inline-block;vertical-align:middle}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- ============ SIDEBAR ============ -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon">X</div>
+      <span class="logo-text">CrossSell AI</span>
+    </div>
+    <nav class="sidebar-nav">
+      <button class="nav-item active" data-page="dashboard" onclick="switchPage('dashboard')">
+        <span class="nav-icon">📊</span>工作台
+      </button>
+      <button class="nav-item" data-page="create" onclick="switchPage('create')">
+        <span class="nav-icon">🎬</span>内容生成
+      </button>
+      <button class="nav-item" data-page="strategy" onclick="switchPage('strategy')">
+        <span class="nav-icon">🎯</span>投放策略
+      </button>
+      <button class="nav-item" data-page="analytics" onclick="switchPage('analytics')">
+        <span class="nav-icon">📈</span>数据中心
+      </button>
+    </nav>
+    <div class="sidebar-footer">
+      <button class="theme-btn" onclick="toggleTheme()">
+        <span class="nav-icon">🌓</span>
+        <span id="theme-label">切换暗色模式</span>
+      </button>
+    </div>
+  </aside>
+
+  <!-- ============ MAIN CONTENT ============ -->
+  <main class="main">
+
+    <!-- ===== PAGE 1: 工作台首页 ===== -->
+    <div class="page active" id="page-dashboard">
+      <div class="mb-24">
+        <h1>工作台</h1>
+        <p class="subtitle">欢迎回来，查看你的内容营销概览</p>
+      </div>
+
+      <!-- Stats Cards - annotation -->
+      <div class="annotation mb-24" data-note="📌 顶部统计卡片 — 本周生成数据一目了然">
+        <div class="grid-3">
+          <div class="stat-card">
+            <div>
+              <div class="stat-label">本周生成视频</div>
+              <div class="stat-value">24<span class="stat-unit">个</span></div>
+            </div>
+            <div class="stat-icon blue">🎬</div>
+          </div>
+          <div class="stat-card">
+            <div>
+              <div class="stat-label">本周生成文案</div>
+              <div class="stat-value">86<span class="stat-unit">条</span></div>
+            </div>
+            <div class="stat-icon green">📝</div>
+          </div>
+          <div class="stat-card">
+            <div>
+              <div class="stat-label">本周投放建议</div>
+              <div class="stat-value">8<span class="stat-unit">份</span></div>
+            </div>
+            <div class="stat-icon amber">💡</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Start CTA - annotation -->
+      <div class="annotation mb-24" data-note="📌 快速启动 CTA → 点击跳转到「内容生成」页">
+        <div class="cta-card" onclick="switchPage('create')" style="cursor:pointer">
+          <div>
+            <h2>创建新的营销任务</h2>
+            <p>输入产品信息，AI 自动生成短视频和社媒文案</p>
+          </div>
+          <div class="cta-badge">
+            <span>+</span> 开始创建 <span>→</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recent Tasks - annotation -->
+      <div class="annotation" data-note="📌 最近任务列表 — 快速查看历史任务状态">
+        <div class="card" style="padding:0;overflow:hidden">
+          <div class="card-header" style="padding:16px 20px">
+            <h3>最近任务</h3>
+            <button class="btn-ghost" onclick="switchPage('create')">查看全部 →</button>
+          </div>
+          <div class="task-row">
+            <div class="task-info">
+              <span class="badge badge-success">✓ 已完成</span>
+              <div>
+                <div class="task-name">便携式蓝牙音箱</div>
+                <div class="task-meta">TikTok · Instagram · Facebook · 2小时前</div>
+              </div>
+            </div>
+          </div>
+          <div class="task-row">
+            <div class="task-info">
+              <span class="badge badge-success">✓ 已完成</span>
+              <div>
+                <div class="task-name">瑜伽运动水壶</div>
+                <div class="task-meta">TikTok · YouTube Shorts · 5小时前</div>
+              </div>
+            </div>
+          </div>
+          <div class="task-row">
+            <div class="task-info">
+              <span class="badge badge-warning">⟳ 生成中</span>
+              <div>
+                <div class="task-name">无线降噪耳机 Pro</div>
+                <div class="task-meta">TikTok · Instagram · Pinterest · 进行中</div>
+              </div>
+            </div>
+          </div>
+          <div class="task-row">
+            <div class="task-info">
+              <span class="badge badge-error">✕ 失败</span>
+              <div>
+                <div class="task-name">天然大豆蜡烛套装</div>
+                <div class="task-meta">Facebook · 音频合成超时</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== PAGE 2: 内容生成 ===== -->
+    <div class="page" id="page-create">
+      <div class="mb-24">
+        <h1>内容生成</h1>
+        <p class="subtitle">AI 驱动，一键生成多平台本土化营销内容</p>
+      </div>
+
+      <!-- Step Indicator -->
+      <div class="annotation mb-24" data-note="📌 步骤指示器 — 当前进度：Step 1 → Step 2 → Step 3">
+        <div class="step-bar" id="stepBar">
+          <div class="step-item active" id="step1ind">
+            <span class="step-dot">1</span> 产品信息
+          </div>
+          <span class="step-arrow">›</span>
+          <div class="step-item" id="step2ind">
+            <span class="step-dot">2</span> 生成进度
+          </div>
+          <span class="step-arrow">›</span>
+          <div class="step-item" id="step3ind">
+            <span class="step-dot">3</span> 查看结果
+          </div>
+        </div>
+      </div>
+
+      <!-- ====== Step 1: Product Form ====== -->
+      <div id="step1Content">
+        <div class="annotation mb-20" data-note="📌 表单区域 — 必填字段标红星，空字段提交时红色边框 + 错误提示">
+          <div class="card mb-16">
+            <label class="form-label">产品名称 <span class="required">*</span></label>
+            <input type="text" class="form-input" id="productName" placeholder="例如：便携式蓝牙音箱、瑜伽运动水壶...">
+            <div class="field-error" id="productNameError">请输入产品名称</div>
+          </div>
+
+          <div class="card mb-16">
+            <label class="form-label">产品简介 / 核心卖点</label>
+            <textarea class="form-input form-textarea" id="productDesc" placeholder="描述产品的核心卖点、特色功能、使用场景...&#10;例如：IPX7级防水、12小时超长续航、重低音增强技术..."></textarea>
+          </div>
+
+          <div class="card mb-16">
+            <label class="form-label">目标市场 <span class="required">*</span></label>
+            <div class="tag-group" id="marketTags">
+              <button class="tag-btn" data-value="美国" onclick="toggleTag(this)">🇺🇸 美国</button>
+              <button class="tag-btn" data-value="英国" onclick="toggleTag(this)">🇬🇧 英国</button>
+              <button class="tag-btn" data-value="德国" onclick="toggleTag(this)">🇩🇪 德国</button>
+              <button class="tag-btn" data-value="日本" onclick="toggleTag(this)">🇯🇵 日本</button>
+              <button class="tag-btn" data-value="东南亚" onclick="toggleTag(this)">🌏 东南亚</button>
+              <button class="tag-btn" data-value="法国" onclick="toggleTag(this)">🇫🇷 法国</button>
+              <button class="tag-btn" data-value="巴西" onclick="toggleTag(this)">🇧🇷 巴西</button>
+            </div>
+            <div class="field-error" id="marketError">请至少选择一个目标市场</div>
+          </div>
+
+          <div class="card mb-16">
+            <label class="form-label">目标平台 <span class="required">*</span></label>
+            <div class="tag-group" id="platformTags">
+              <button class="tag-btn" data-value="TikTok" onclick="toggleTag(this)">🎵 TikTok</button>
+              <button class="tag-btn" data-value="Instagram" onclick="toggleTag(this)">📸 Instagram</button>
+              <button class="tag-btn" data-value="YouTube Shorts" onclick="toggleTag(this)">▶️ YouTube Shorts</button>
+              <button class="tag-btn" data-value="Facebook" onclick="toggleTag(this)">📘 Facebook</button>
+              <button class="tag-btn" data-value="Pinterest" onclick="toggleTag(this)">📌 Pinterest</button>
+            </div>
+            <div class="field-error" id="platformError">请至少选择一个目标平台</div>
+          </div>
+        </div>
+
+        <button class="btn btn-primary btn-full" onclick="validateAndProceed()">
+          ✨ 开始生成
+        </button>
+      </div>
+
+      <!-- ====== Step 2: Progress ====== -->
+      <div id="step2Content" style="display:none">
+        <div class="card" style="text-align:center;padding:40px">
+          <div style="font-size:48px;margin-bottom:16px">⚙️</div>
+          <h2 style="margin-bottom:8px" id="progressMsg">AI 正在为你生成内容...</h2>
+          <p style="color:var(--text-muted);font-size:14px">预计耗时 30-60 秒</p>
+        </div>
+
+        <div class="card mt-16">
+          <div class="progress-list">
+            <div class="progress-step" id="ps-script">
+              <div class="progress-icon active">📝</div>
+              <div class="progress-body">
+                <h4>脚本生成</h4>
+                <p>AI 分析产品卖点，生成多平台适配脚本</p>
+                <div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:100%"></div></div>
+              </div>
+            </div>
+            <div class="progress-step" id="ps-voice">
+              <div class="progress-icon">🎙️</div>
+              <div class="progress-body">
+                <h4>配音合成</h4>
+                <p>多语种 AI 配音，本土化语音合成</p>
+              </div>
+            </div>
+            <div class="progress-step" id="ps-video">
+              <div class="progress-icon">🎬</div>
+              <div class="progress-body">
+                <h4>视频渲染</h4>
+                <p>智能匹配素材，自动剪辑合成视频</p>
+              </div>
+            </div>
+            <div class="progress-step" id="ps-copy">
+              <div class="progress-icon">✨</div>
+              <div class="progress-body">
+                <h4>文案优化</h4>
+                <p>平台风格适配，关键词优化</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ====== Step 3: Results ====== -->
+      <div id="step3Content" style="display:none">
+        <div class="card mb-16" style="background:linear-gradient(135deg,#10b981,#14b8a6);color:#fff;border:none">
+          <div style="display:flex;align-items:center;gap:12px">
+            <span style="font-size:24px">✅</span>
+            <div>
+              <div style="font-weight:700">内容生成完成！</div>
+              <div style="font-size:13px;opacity:.85">已生成 3 个视频 + 6 条文案 + 投放策略建议</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab Switcher -->
+        <div class="annotation mb-16" data-note="📌 Tab 切换：短视频预览 | 文案矩阵 | 投放建议">
+          <div class="tab-bar" id="resultTabs">
+            <button class="tab-btn active" onclick="switchResultTab('video')">🎬 短视频 <span class="tab-count">3</span></button>
+            <button class="tab-btn" onclick="switchResultTab('copy')">📝 文案矩阵 <span class="tab-count">6</span></button>
+            <button class="tab-btn" onclick="switchResultTab('strategy')">💡 投放建议</button>
+          </div>
+        </div>
+
+        <!-- Video Tab -->
+        <div id="resultVideo" class="grid-2">
+          <div>
+            <div class="video-preview">
+              <div class="play-btn">▶</div>
+              <div style="position:absolute;bottom:8px;right:8px;color:#fff;font-size:11px;background:rgba(0,0,0,0.6);padding:2px 8px;border-radius:4px">0:15</div>
+            </div>
+            <div style="margin-top:12px;font-weight:600">产品开箱 · TikTok 竖版</div>
+            <div style="font-size:12px;color:var(--text-muted)">TikTok · 15秒 · 英语</div>
+          </div>
+          <div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div class="platform-card active">
+                <div class="plat-name">TikTok 版</div>
+                <div class="plat-meta">15秒 · 竖版 9:16</div>
+                <div class="plat-badge">✓ 当前预览</div>
+              </div>
+              <div class="platform-card">
+                <div class="plat-name">Instagram Reels 版</div>
+                <div class="plat-meta">20秒 · 竖版 9:16</div>
+              </div>
+              <div class="platform-card">
+                <div class="plat-name">Facebook 版</div>
+                <div class="plat-meta">15秒 · 横版 16:9</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Copy Tab (hidden initially) -->
+        <div id="resultCopy" style="display:none">
+          <div class="grid-2">
+            <div class="card">
+              <div class="flex-between mb-12">
+                <span style="font-weight:600">🎵 TikTok · 美国市场</span>
+                <button class="btn-xs btn-primary">一键复制</button>
+              </div>
+              <div style="background:var(--bg);border-radius:8px;padding:14px;font-size:13px;line-height:1.7;color:var(--text)">
+                ✨ Your morning routine just got an upgrade! 💧<br><br>
+                This portable Bluetooth speaker brings studio-quality sound wherever you go. 12-hour battery + IPX7 waterproof = pool party ready! 🎵<br><br>
+                Tap the link in bio to grab yours! 🔗
+              </div>
+              <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">
+                <span style="font-size:11px;padding:2px 8px;background:rgba(99,102,241,0.1);color:var(--primary);border-radius:6px">#PortableSpeaker</span>
+                <span style="font-size:11px;padding:2px 8px;background:rgba(99,102,241,0.1);color:var(--primary);border-radius:6px">#BluetoothSpeaker</span>
+                <span style="font-size:11px;padding:2px 8px;background:rgba(99,102,241,0.1);color:var(--primary);border-radius:6px">#TechDeals</span>
+              </div>
+            </div>
+            <div class="card">
+              <div class="flex-between mb-12">
+                <span style="font-weight:600">📸 Instagram · 美国市场</span>
+                <button class="btn-xs btn-primary">一键复制</button>
+              </div>
+              <div style="background:var(--bg);border-radius:8px;padding:14px;font-size:13px;line-height:1.7;color:var(--text)">
+                Sound that moves with you. 🎶<br><br>
+                Meet the speaker that turns any moment into a vibe. Compact design. Room-filling bass. All-day battery.<br><br>
+                #LinkInBio
+              </div>
+              <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">
+                <span style="font-size:11px;padding:2px 8px;background:rgba(99,102,241,0.1);color:var(--primary);border-radius:6px">#SpeakerLife</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Strategy Tab (hidden initially) -->
+        <div id="resultStrategy" style="display:none">
+          <div class="grid-2">
+            <div class="card">
+              <h3 class="mb-12">建议预算分配</h3>
+              <div class="pie-placeholder"></div>
+              <div class="pie-legend">
+                <div class="pie-legend-item"><span class="pie-legend-dot" style="background:#6366f1"></span> TikTok 45%</div>
+                <div class="pie-legend-item"><span class="pie-legend-dot" style="background:#f59e0b"></span> Meta 25%</div>
+                <div class="pie-legend-item"><span class="pie-legend-dot" style="background:#10b981"></span> Google 15%</div>
+                <div class="pie-legend-item"><span class="pie-legend-dot" style="background:#ef4444"></span> Pinterest 15%</div>
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:12px">
+              <div class="card">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+                  <span style="font-size:20px">🎵</span>
+                  <span style="font-weight:700">TikTok</span>
+                  <span class="badge badge-success">ROAS 3.5-4.8x</span>
+                </div>
+                <p style="font-size:12px;color:var(--text-muted)">建议日预算：<strong style="color:var(--primary)">$150</strong> · 你的品类在该平台CTR最高，视频内容与用户画像高度匹配</p>
+              </div>
+              <div class="card">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+                  <span style="font-size:20px">📸</span>
+                  <span style="font-weight:700">Instagram</span>
+                  <span class="badge badge-warning">ROAS 2.5-3.5x</span>
+                </div>
+                <p style="font-size:12px;color:var(--text-muted)">建议日预算：<strong style="color:var(--primary)">$80</strong> · Reels 内容与产品生活方式契合度高，适合品牌种草</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <button class="btn btn-ghost mt-16" onclick="resetCreate()" style="display:block;margin:16px auto 0">← 返回重新创建</button>
+      </div>
+    </div>
+
+    <!-- ===== PAGE 3: 投放策略 ===== -->
+    <div class="page" id="page-strategy">
+      <div class="mb-24">
+        <h1>投放策略</h1>
+        <p class="subtitle">基于 AI 分析，为每个产品推荐最优投放方案</p>
+      </div>
+
+      <!-- Product Selector - annotation -->
+      <div class="annotation mb-20" data-note="📌 产品选择器 — 下拉选择已分析的产品">
+        <div class="card">
+          <div style="display:flex;align-items:center;gap:12px">
+            <label style="font-size:14px;font-weight:600;white-space:nowrap">选择产品</label>
+            <select class="form-select">
+              <option>便携式蓝牙音箱</option>
+              <option>瑜伽运动水壶</option>
+              <option>无线降噪耳机 Pro</option>
+            </select>
+            <span style="font-size:12px;color:var(--text-muted)">TikTok · Instagram · Facebook</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Channel Cards + Budget Pie -->
+      <div class="grid-5">
+        <!-- Channel Cards -->
+        <div>
+          <div class="section-label">渠道推荐</div>
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <div class="channel-card">
+              <div class="ch-header">
+                <div class="ch-name">🎵 TikTok</div>
+                <span class="ch-priority p1">首选</span>
+              </div>
+              <div class="ch-metrics">
+                <div class="ch-metric">
+                  <div class="ch-metric-label">建议日预算</div>
+                  <div class="ch-metric-value">$150</div>
+                </div>
+                <div class="ch-metric">
+                  <div class="ch-metric-label">预计 ROAS</div>
+                  <div class="ch-metric-value" style="color:var(--primary)">3.5-4.8x</div>
+                </div>
+              </div>
+              <div class="ch-reason">💡 你的品类在该平台 CTR 最高，视频内容与用户画像高度匹配，建议优先分配预算。</div>
+            </div>
+
+            <div class="channel-card">
+              <div class="ch-header">
+                <div class="ch-name">📸 Instagram</div>
+                <span class="ch-priority p2">次选</span>
+              </div>
+              <div class="ch-metrics">
+                <div class="ch-metric">
+                  <div class="ch-metric-label">建议日预算</div>
+                  <div class="ch-metric-value">$80</div>
+                </div>
+                <div class="ch-metric">
+                  <div class="ch-metric-label">预计 ROAS</div>
+                  <div class="ch-metric-value" style="color:var(--primary)">2.5-3.5x</div>
+                </div>
+              </div>
+              <div class="ch-reason">💡 Reels 内容与产品生活方式定位契合度高，适合品牌种草和长期粉丝积累。</div>
+            </div>
+
+            <div class="channel-card">
+              <div class="ch-header">
+                <div class="ch-name">🔍 Google Ads</div>
+                <span class="ch-priority p3">备选</span>
+              </div>
+              <div class="ch-metrics">
+                <div class="ch-metric">
+                  <div class="ch-metric-label">建议日预算</div>
+                  <div class="ch-metric-value">$50</div>
+                </div>
+                <div class="ch-metric">
+                  <div class="ch-metric-label">预计 ROAS</div>
+                  <div class="ch-metric-value" style="color:var(--primary)">1.8-2.5x</div>
+                </div>
+              </div>
+              <div class="ch-reason">💡 搜索意图明确，适合收割精准流量，建议作为补充渠道。</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Budget Pie + Tips -->
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div class="annotation" data-note="📌 预算分配饼图 — 视觉化呈现渠道占比">
+            <div class="card">
+              <div class="section-label">预算分配</div>
+              <div class="pie-placeholder" style="margin-top:12px"></div>
+              <div class="pie-legend">
+                <div class="pie-legend-item"><span class="pie-legend-dot" style="background:#6366f1"></span> TikTok 45%</div>
+                <div class="pie-legend-item"><span class="pie-legend-dot" style="background:#f59e0b"></span> Meta 25%</div>
+                <div class="pie-legend-item"><span class="pie-legend-dot" style="background:#10b981"></span> Google 15%</div>
+                <div class="pie-legend-item"><span class="pie-legend-dot" style="background:#ef4444"></span> Pinterest 15%</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="section-label">投放建议</div>
+            <ol style="padding-left:20px;display:flex;flex-direction:column;gap:10px;font-size:13px;color:var(--text)">
+              <li>优先启动 TikTok 投放，利用高 CTR 快速起量</li>
+              <li>Instagram 配合 Reels 内容进行品牌种草</li>
+              <li>预算 70% 分配短视频平台，30% 分配搜索渠道</li>
+              <li>每周更新至少 3 条新素材，维持广告质量分</li>
+              <li>监控 CPC 变化，超过 $1.2 时考虑调整素材</li>
+            </ol>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== PAGE 4: 数据中心 ===== -->
+    <div class="page" id="page-analytics">
+      <div class="flex-between mb-24">
+        <div>
+          <h1>数据中心</h1>
+          <p class="subtitle">追踪内容生产与投放效果，数据驱动决策</p>
+        </div>
+        <div class="annotation" data-note="📌 日期选择器：本周 | 本月 | 本季度">
+          <div class="time-pills">
+            <button class="time-pill active">本周</button>
+            <button class="time-pill">本月</button>
+            <button class="time-pill">本季度</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Summary Cards -->
+      <div class="grid-4 mb-24">
+        <div class="stat-card">
+          <div>
+            <div class="stat-label">总生成内容</div>
+            <div class="stat-value">118<span class="stat-unit">个</span></div>
+          </div>
+          <div class="stat-icon purple">📦</div>
+        </div>
+        <div class="stat-card">
+          <div>
+            <div class="stat-label">生成视频</div>
+            <div class="stat-value">24<span class="stat-unit">个</span></div>
+          </div>
+          <div class="stat-icon blue">🎬</div>
+        </div>
+        <div class="stat-card">
+          <div>
+            <div class="stat-label">生成文案</div>
+            <div class="stat-value">86<span class="stat-unit">条</span></div>
+          </div>
+          <div class="stat-icon green">📝</div>
+        </div>
+        <div class="stat-card">
+          <div>
+            <div class="stat-label">策略建议</div>
+            <div class="stat-value">8<span class="stat-unit">份</span></div>
+          </div>
+          <div class="stat-icon amber">💡</div>
+        </div>
+      </div>
+
+      <!-- Content Distribution + Task Table -->
+      <div class="grid-5">
+        <div class="annotation" data-note="📌 平台内容分布饼图">
+          <div class="card" style="height:100%">
+            <div class="section-label">平台内容分布</div>
+            <div class="pie-placeholder" style="margin-top:20px;width:160px;height:160px;
+              background:conic-gradient(#ff0050 0% 40%, #e4405f 40% 65%, #ff0000 65% 80%, #1877f2 80% 92%, #e60023 92% 100%)"></div>
+            <div class="pie-legend">
+              <div class="pie-legend-item"><span class="pie-legend-dot" style="background:#ff0050"></span> TikTok 40%</div>
+              <div class="pie-legend-item"><span class="pie-legend-dot" style="background:#e4405f"></span> Instagram 25%</div>
+              <div class="pie-legend-item"><span class="pie-legend-dot" style="background:#ff0000"></span> YouTube 15%</div>
+              <div class="pie-legend-item"><span class="pie-legend-dot" style="background:#1877f2"></span> Facebook 12%</div>
+              <div class="pie-legend-item"><span class="pie-legend-dot" style="background:#e60023"></span> Pinterest 8%</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="annotation" data-note="📌 最近生成任务表格">
+          <div class="card" style="padding:0;overflow:hidden;height:100%">
+            <div style="padding:16px 20px;border-bottom:1px solid var(--border)">
+              <div class="section-label" style="margin:0">最近生成任务</div>
+            </div>
+            <div style="overflow-x:auto">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>产品名称</th>
+                    <th>平台</th>
+                    <th>市场</th>
+                    <th>时间</th>
+                    <th>状态</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td style="font-weight:500">便携式蓝牙音箱</td>
+                    <td>3</td>
+                    <td>2</td>
+                    <td style="font-size:12px;color:var(--text-muted)">7月16日 14:30</td>
+                    <td><span class="badge badge-success">✓ 已完成</span></td>
+                  </tr>
+                  <tr>
+                    <td style="font-weight:500">瑜伽运动水壶</td>
+                    <td>2</td>
+                    <td>3</td>
+                    <td style="font-size:12px;color:var(--text-muted)">7月16日 10:15</td>
+                    <td><span class="badge badge-success">✓ 已完成</span></td>
+                  </tr>
+                  <tr>
+                    <td style="font-weight:500">无线降噪耳机 Pro</td>
+                    <td>3</td>
+                    <td>2</td>
+                    <td style="font-size:12px;color:var(--text-muted)">7月15日 16:45</td>
+                    <td><span class="badge badge-success">✓ 已完成</span></td>
+                  </tr>
+                  <tr>
+                    <td style="font-weight:500">天然大豆蜡烛套装</td>
+                    <td>1</td>
+                    <td>1</td>
+                    <td style="font-size:12px;color:var(--text-muted)">7月15日 09:20</td>
+                    <td><span class="badge badge-error">✕ 失败</span></td>
+                  </tr>
+                  <tr>
+                    <td style="font-weight:500">可折叠旅行背包</td>
+                    <td>2</td>
+                    <td>2</td>
+                    <td style="font-size:12px;color:var(--text-muted)">7月14日 18:00</td>
+                    <td><span class="badge badge-warning">⟳ 生成中</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+// ===== Page Navigation =====
+function switchPage(page) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + page).classList.add('active');
+  document.querySelector(`[data-page="${page}"]`).classList.add('active');
+}
+
+// ===== Theme Toggle =====
+function toggleTheme() {
+  const isDark = document.documentElement.classList.toggle('dark');
+  document.getElementById('theme-label').textContent = isDark ? '切换亮色模式' : '切换暗色模式';
+}
+
+// ===== Tag Selection =====
+function toggleTag(btn) {
+  btn.classList.toggle('selected');
+  const groupId = btn.parentElement.id;
+  const errorEl = document.getElementById(
+    groupId === 'marketTags' ? 'marketError' : 'platformError'
+  );
+  if (errorEl) errorEl.classList.remove('show');
+}
+
+// ===== Form Validation & Step Progression (Demo) =====
+function validateAndProceed() {
+  let valid = true;
+  const name = document.getElementById('productName').value.trim();
+  const markets = document.querySelectorAll('#marketTags .selected');
+  const platforms = document.querySelectorAll('#platformTags .selected');
+
+  if (!name) {
+    document.getElementById('productName').classList.add('error');
+    document.getElementById('productNameError').classList.add('show');
+    valid = false;
+  } else {
+    document.getElementById('productName').classList.remove('error');
+    document.getElementById('productNameError').classList.remove('show');
+  }
+
+  if (markets.length === 0) {
+    document.getElementById('marketError').classList.add('show');
+    valid = false;
+  }
+
+  if (platforms.length === 0) {
+    document.getElementById('platformError').classList.add('show');
+    valid = false;
+  }
+
+  if (!valid) return;
+
+  // Proceed to Step 2
+  document.getElementById('step1Content').style.display = 'none';
+  document.getElementById('step2Content').style.display = 'block';
+
+  // Update step indicator
+  document.getElementById('step1ind').className = 'step-item done';
+  document.getElementById('step1ind').querySelector('.step-dot').textContent = '✓';
+  document.getElementById('step2ind').className = 'step-item active';
+
+  // Simulate progress animation
+  simulateProgress();
+}
+
+function simulateProgress() {
+  const steps = ['ps-script','ps-voice','ps-video','ps-copy'];
+  const msgs = ['脚本生成完成，正在合成配音...','配音合成完成，正在渲染视频...','视频渲染完成，正在优化文案...'];
+  let i = 0;
+  const interval = setInterval(() => {
+    if (i >= steps.length) {
+      clearInterval(interval);
+      // Move to Step 3
+      setTimeout(() => {
+        document.getElementById('step2Content').style.display = 'none';
+        document.getElementById('step3Content').style.display = 'block';
+        document.getElementById('step2ind').className = 'step-item done';
+        document.getElementById('step2ind').querySelector('.step-dot').textContent = '✓';
+        document.getElementById('step3ind').className = 'step-item active';
+      }, 500);
+      return;
+    }
+    const el = document.getElementById(steps[i]);
+    const icon = el.querySelector('.progress-icon');
+    icon.className = 'progress-icon done';
+    icon.textContent = '✓';
+    if (i < steps.length - 1) {
+      const next = document.getElementById(steps[i+1]);
+      next.querySelector('.progress-icon').className = 'progress-icon active';
+      next.querySelector('.progress-body').innerHTML += '<div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:100%"></div></div>';
+    }
+    if (i < msgs.length) {
+      document.getElementById('progressMsg').textContent = msgs[i];
+    }
+    i++;
+  }, 1200);
+}
+
+// ===== Result Tab Switching =====
+function switchResultTab(tab) {
+  document.querySelectorAll('#resultTabs .tab-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('resultVideo').style.display = tab === 'video' ? '' : 'none';
+  document.getElementById('resultCopy').style.display = tab === 'copy' ? '' : 'none';
+  document.getElementById('resultStrategy').style.display = tab === 'strategy' ? '' : 'none';
+}
+
+// ===== Reset Create Flow =====
+function resetCreate() {
+  document.getElementById('step1Content').style.display = '';
+  document.getElementById('step2Content').style.display = 'none';
+  document.getElementById('step3Content').style.display = 'none';
+
+  // Reset step indicators
+  ['step1ind','step2ind','step3ind'].forEach((id,i) => {
+    const el = document.getElementById(id);
+    el.className = i === 0 ? 'step-item active' : 'step-item';
+    el.querySelector('.step-dot').textContent = i + 1;
+  });
+
+  // Reset progress icons
+  document.querySelectorAll('.progress-step .progress-icon').forEach((icon, i) => {
+    icon.className = i === 0 ? 'progress-icon active' : 'progress-icon';
+    icon.textContent = ['📝','🎙️','🎬','✨'][i];
+  });
+
+  // Reset progress bars
+  document.querySelectorAll('.progress-bar-wrap').forEach(w => w.remove());
+  document.getElementById('progressMsg').textContent = 'AI 正在为你生成内容...';
+
+  // Reset form
+  document.getElementById('productName').value = '';
+  document.getElementById('productName').classList.remove('error');
+  document.getElementById('productNameError').classList.remove('show');
+  document.getElementById('productDesc').value = '';
+  document.querySelectorAll('#marketTags .selected, #platformTags .selected').forEach(b => b.classList.remove('selected'));
+  document.getElementById('marketError').classList.remove('show');
+  document.getElementById('platformError').classList.remove('show');
+
+  // Reset result tabs
+  document.querySelectorAll('#resultTabs .tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector('#resultTabs .tab-btn').classList.add('active');
+  document.getElementById('resultVideo').style.display = '';
+  document.getElementById('resultCopy').style.display = 'none';
+  document.getElementById('resultStrategy').style.display = 'none';
+}
+</script>
+</body>
+</html>
