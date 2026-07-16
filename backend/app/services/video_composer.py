@@ -217,6 +217,7 @@ class VideoComposer:
         return (
             text.replace("\\", "\\\\")
             .replace(":", "\\:")
+            .replace(",", "\\,")
             .replace("'", "\\'")
             .replace("%", "\\%")
             .replace("{", "\\{")
