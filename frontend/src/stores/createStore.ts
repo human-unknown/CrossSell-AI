@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import axios from 'axios'
 import type { ProductInfo, GenerationProgress, GenerationResult } from '../types'
 import {
   triggerGeneration,
@@ -20,6 +21,7 @@ interface CreateState {
   taskId: string | null
   progress: GenerationProgress | null
   isGenerating: boolean
+  errorMessage: string | null
   setProgress: (progress: GenerationProgress) => void
   setIsGenerating: (value: boolean) => void
 
@@ -30,6 +32,7 @@ interface CreateState {
   // Actions
   goToStep: (step: 1 | 2 | 3) => void
   startGeneration: () => () => void // returns cancel function
+  retryGeneration: () => void
   reset: () => void
 }
 
@@ -80,7 +83,7 @@ function startPolling(
           setProgress({
             ...progress,
             status: 'failed',
-            message: '获取结果失败，请重试',
+            message: '获取生成结果失败，请点击重试',
           })
         }
         return
@@ -102,7 +105,7 @@ function startPolling(
     }
   }
 
-  // 首次立即查询，后续每 2 秒
+  // 首次延迟 1 秒后查询，后续每 2 秒
   timer = setTimeout(poll, 1000)
 
   return () => {
@@ -116,6 +119,7 @@ function startPolling(
 export const useCreateStore = create<CreateState>((set, get) => {
   let cancelPolling: (() => void) | null = null
   let cancelSimulation: (() => void) | null = null
+  let savedProductInfo: ProductInfo | null = null
 
   return {
     currentStep: 1,
@@ -125,6 +129,7 @@ export const useCreateStore = create<CreateState>((set, get) => {
     taskId: null,
     progress: null,
     isGenerating: false,
+    errorMessage: null,
     setProgress: (progress) => set({ progress }),
     setIsGenerating: (value) => set({ isGenerating: value }),
     result: null,
@@ -133,71 +138,120 @@ export const useCreateStore = create<CreateState>((set, get) => {
 
     // ======== 核心：启动生成流程 ========
     startGeneration: () => {
-      const { productInfo, setProgress, setIsGenerating, setResult, goToStep } = get()
+      const { productInfo } = get()
 
-      setIsGenerating(true)
-      goToStep(2)
+      // 保存产品信息（失败后重试用）
+      savedProductInfo = { ...productInfo }
+
+      set({
+        isGenerating: true,
+        errorMessage: null,
+        currentStep: 2,
+      })
 
       const isMock = getApiMode() === 'mock'
 
       if (isMock) {
-        // ---------- Mock 模式：使用 simulateProgress ----------
+        // ---------- Mock 模式 ----------
         cancelSimulation = simulateProgress(
-          (prog) => setProgress(prog),
+          (prog) => set({ progress: prog }),
           async () => {
-            setIsGenerating(false)
-            const taskId = `task_mock_${Date.now()}`
-            const res = await getTaskResult(taskId)
-            setResult(res)
-            goToStep(3)
-            const currentProgress = get().progress
-            if (currentProgress) {
-              setProgress({ ...currentProgress, status: 'completed' })
+            set({ isGenerating: false })
+            try {
+              const taskId = `task_mock_${Date.now()}`
+              const res = await getTaskResult(taskId)
+              set({ result: res })
+              const currentProgress = get().progress
+              if (currentProgress) {
+                set({ progress: { ...currentProgress, status: 'completed' } })
+              }
+              set({ currentStep: 3 })
+            } catch (err) {
+              console.error('[Store] Mock getTaskResult failed:', err)
+              set({
+                errorMessage: '获取结果失败，请重试',
+                progress: get().progress
+                  ? { ...get().progress!, status: 'failed', message: '获取结果失败，请重试' }
+                  : null,
+              })
             }
           }
         )
-        return () => {
-          cancelSimulation?.()
-        }
+        return () => cancelSimulation?.()
       }
 
-      // ---------- 真实 API 模式：POST → 轮询 ----------
+      // ---------- 真实 API 模式 ----------
       triggerGeneration(productInfo)
         .then(({ taskId }) => {
           set({ taskId })
+
           // 设置初始进度
-          setProgress({
+          const initialProgress: GenerationProgress = {
             taskId,
             status: 'pending',
-            steps: { script: 'waiting', voiceover: 'waiting', videoRender: 'waiting', copyOptimize: 'waiting' },
-            message: '任务已提交，正在排队...',
-          })
+            steps: {
+              script: 'waiting',
+              voiceover: 'waiting',
+              videoRender: 'waiting',
+              copyOptimize: 'waiting',
+            },
+            message: '任务已提交，AI 正在分析产品信息...',
+          }
+          set({ progress: initialProgress })
 
           cancelPolling = startPolling(
             taskId,
-            setProgress,
-            setIsGenerating,
-            setResult,
-            goToStep
+            (prog) => set({ progress: prog }),
+            (val) => set({ isGenerating: val }),
+            (res) => set({ result: res }),
+            (step) => set({ currentStep: step })
           )
         })
         .catch((err) => {
           console.error('[Store] Trigger generation failed:', err)
-          setIsGenerating(false)
-          setProgress({
-            taskId: '',
-            status: 'failed',
-            steps: { script: 'error', voiceover: 'waiting', videoRender: 'waiting', copyOptimize: 'waiting' },
-            message: '提交失败，请检查网络后重试',
+          const message =
+            err instanceof Error
+              ? err.message
+              : axios.isAxiosError(err)
+              ? err.response?.data?.detail || '服务器错误，请稍后重试'
+              : '网络连接失败，请检查后端是否已启动'
+
+          set({
+            isGenerating: false,
+            errorMessage: message,
+            progress: {
+              taskId: '',
+              status: 'failed',
+              steps: {
+                script: 'error',
+                voiceover: 'waiting',
+                videoRender: 'waiting',
+                copyOptimize: 'waiting',
+              },
+              message,
+            },
           })
-          // 降级到 mock
-          set({ taskId: null })
         })
 
-      // 返回 cancel 函数
-      return () => {
-        cancelPolling?.()
+      return () => cancelPolling?.()
+    },
+
+    // ======== 重试 ========
+    retryGeneration: () => {
+      // 先清理旧的轮询
+      cancelPolling?.()
+      cancelSimulation?.()
+      cancelPolling = null
+      cancelSimulation = null
+
+      // 恢复保存的产品信息
+      const info = savedProductInfo || get().productInfo
+      if (info) {
+        set({ productInfo: info })
       }
+
+      // 重新启动（startGeneration 内部会赋值 cancelPolling）
+      get().startGeneration()
     },
 
     // ======== 重置 ========
@@ -206,6 +260,7 @@ export const useCreateStore = create<CreateState>((set, get) => {
       cancelSimulation?.()
       cancelPolling = null
       cancelSimulation = null
+      savedProductInfo = null
       set({
         currentStep: 1,
         productInfo: { ...defaultProductInfo },
@@ -213,6 +268,7 @@ export const useCreateStore = create<CreateState>((set, get) => {
         isGenerating: false,
         result: null,
         taskId: null,
+        errorMessage: null,
       })
     },
   }

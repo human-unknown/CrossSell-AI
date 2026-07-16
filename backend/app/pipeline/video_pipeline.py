@@ -80,7 +80,7 @@ async def run_video_pipeline(
             await update_step("text_to_speech", "in_progress")
             await update_progress((completed + 0.25) / total_combos)
 
-            audio_path = output_base / f"{combo_key}_audio.mp3"
+            audio_path = output_base / f"{combo_key}_audio.wav"
             language = script.get("language", "en")
             full_script = script.get("full_script", "")
             try:

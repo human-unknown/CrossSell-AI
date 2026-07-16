@@ -31,7 +31,7 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className="fixed left-0 top-0 h-full w-60 bg-[var(--color-bg-card)] border-r border-[var(--color-border)] flex flex-col z-40">
+    <aside className="fixed left-0 top-0 h-full w-60 bg-[var(--color-bg-card)] border-r border-[var(--color-border)] flex flex-col z-40 hidden lg:flex">
       {/* Logo */}
       <div className="h-16 flex items-center gap-3 px-5 border-b border-[var(--color-border)] shrink-0">
         <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[var(--color-primary)] to-purple-500 flex items-center justify-center">
@@ -49,7 +49,7 @@ export default function Sidebar() {
             key={to}
             to={to}
             className={({ isActive: active }) =>
-              `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+              `flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${
                 active || isActive(to)
                   ? 'bg-[var(--color-primary)] text-white shadow-md shadow-purple-500/20'
                   : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg)]'

@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   BarChart3,
   Video,
@@ -29,34 +30,42 @@ const TIME_RANGE_OPTIONS: { value: TimeRange; label: string }[] = [
 ]
 
 export default function Analytics() {
+  const navigate = useNavigate()
   const [timeRange, setTimeRange] = useState<TimeRange>('本周')
   const [data, setData] = useState<AnalyticsData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const abortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
+    // 取消上一次未完成的请求
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+
     async function fetchData() {
       setLoading(true)
       setError(null)
       try {
         const result = await getAnalyticsData(timeRange)
-        setData(result)
+        if (!controller.signal.aborted) {
+          setData(result)
+        }
       } catch (err) {
+        if (controller.signal.aborted) return
         console.error('[Analytics] Failed to load data:', err)
         setError('加载数据失败，请检查网络连接')
       } finally {
-        setLoading(false)
+        if (!controller.signal.aborted) {
+          setLoading(false)
+        }
       }
     }
     fetchData()
   }, [timeRange])
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="w-8 h-8 border-3 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" />
-      </div>
-    )
+    return <AnalyticsSkeleton timeRange={timeRange} onTimeRangeChange={setTimeRange} />
   }
 
   if (error) {
@@ -75,7 +84,7 @@ export default function Analytics() {
           <p className="text-lg font-medium text-[var(--color-text)]">{error}</p>
           <button
             onClick={() => window.location.reload()}
-            className="mt-4 px-4 py-2 text-sm bg-[var(--color-primary)] text-white rounded-lg hover:opacity-90 transition-opacity"
+            className="mt-4 px-4 py-2 text-sm bg-[var(--color-primary)] text-white rounded-lg hover:shadow-md hover:scale-[1.01] transition-all duration-200"
           >
             重新加载
           </button>
@@ -234,8 +243,15 @@ export default function Analytics() {
             暂无数据
           </p>
           <p className="text-sm text-[var(--color-text-muted)] mt-1">
-            当前时间范围内没有内容生产记录
+            {timeRange}内没有内容生产记录
           </p>
+          <button
+            onClick={() => navigate('/create')}
+            className="mt-6 inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-gradient-to-r from-[var(--color-primary)] to-purple-500 text-white text-sm font-medium hover:shadow-lg hover:scale-[1.02] transition-all duration-200"
+          >
+            <Video className="w-4 h-4" />
+            去生成内容
+          </button>
         </div>
       )}
     </div>
@@ -257,13 +273,15 @@ function SummaryCard({
   unit: string
   color: string
 }) {
+  const displayed = useCountUp(value)
+
   return (
     <div className="rounded-xl bg-[var(--color-bg-card)] border border-[var(--color-border)] p-5 hover:shadow-md transition-shadow">
       <div className="flex items-start justify-between">
         <div>
           <p className="text-sm text-[var(--color-text-muted)]">{label}</p>
           <p className="text-3xl font-bold mt-1 text-[var(--color-text)]">
-            {value}
+            {displayed}
             <span className="text-lg font-normal text-[var(--color-text-muted)] ml-1">
               {unit}
             </span>
@@ -331,5 +349,129 @@ function TaskRow({ task }: { task: AnalyticsData['recentTasks'][number] }) {
         </span>
       </td>
     </tr>
+  )
+}
+
+// ============ Count-Up Hook ============
+
+function useCountUp(target: number, duration = 600): number {
+  const [current, setCurrent] = useState(0)
+  const prevTarget = useRef(target)
+
+  useEffect(() => {
+    if (target === 0) {
+      setCurrent(0)
+      prevTarget.current = 0
+      return
+    }
+
+    let cancelled = false
+    let raf: number
+    const startValue = prevTarget.current
+    const delta = target - startValue
+    const startTime = performance.now()
+
+    const step = (now: number) => {
+      if (cancelled) return
+      const elapsed = now - startTime
+      const progress = Math.min(elapsed / duration, 1)
+      const eased = 1 - (1 - progress) * (1 - progress)
+      setCurrent(Math.round(startValue + eased * delta))
+
+      if (progress < 1) {
+        raf = requestAnimationFrame(step)
+      }
+    }
+
+    raf = requestAnimationFrame(step)
+
+    return () => {
+      cancelled = true
+      cancelAnimationFrame(raf)
+      prevTarget.current = target
+    }
+  }, [target, duration])
+
+  return current
+}
+
+// ============ Skeleton Screen ============
+
+function AnalyticsSkeleton({
+  timeRange,
+  onTimeRangeChange,
+}: {
+  timeRange: TimeRange
+  onTimeRangeChange: (v: TimeRange) => void
+}) {
+  return (
+    <div className="space-y-6 animate-fade-in-up">
+      {/* Header */}
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-[var(--color-text)]">数据中心</h1>
+          <p className="text-[var(--color-text-muted)] mt-1">
+            追踪内容生产与投放效果，数据驱动决策
+          </p>
+        </div>
+        <div className="flex items-center gap-1 bg-[var(--color-bg)] rounded-lg p-1">
+          {TIME_RANGE_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              onClick={() => onTimeRangeChange(opt.value)}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
+                timeRange === opt.value
+                  ? 'bg-[var(--color-bg-card)] text-[var(--color-text)] shadow-sm'
+                  : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Stat Cards Skeleton */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {[1, 2, 3, 4].map((i) => (
+          <div
+            key={i}
+            className="rounded-xl bg-[var(--color-bg-card)] border border-[var(--color-border)] p-5 animate-pulse"
+          >
+            <div className="flex items-start justify-between">
+              <div className="space-y-2">
+                <div className="h-4 w-16 bg-[var(--color-border)] rounded" />
+                <div className="h-8 w-20 bg-[var(--color-border)] rounded" />
+              </div>
+              <div className="w-10 h-10 bg-[var(--color-border)] rounded-lg" />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Main Content Skeleton */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        <div className="lg:col-span-2 rounded-xl bg-[var(--color-bg-card)] border border-[var(--color-border)] p-5 animate-pulse">
+          <div className="h-4 w-20 bg-[var(--color-border)] rounded mb-4" />
+          <div className="h-56 bg-[var(--color-border)] rounded-lg" />
+        </div>
+        <div className="lg:col-span-3 rounded-xl bg-[var(--color-bg-card)] border border-[var(--color-border)] animate-pulse">
+          <div className="px-5 py-4 border-b border-[var(--color-border)]">
+            <div className="h-4 w-24 bg-[var(--color-border)] rounded" />
+          </div>
+          <div className="space-y-0">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="flex items-center gap-4 px-5 py-3.5 border-b border-[var(--color-border)]">
+                <div className="h-4 flex-1 bg-[var(--color-border)] rounded" />
+                <div className="h-4 w-8 bg-[var(--color-border)] rounded" />
+                <div className="h-4 w-8 bg-[var(--color-border)] rounded" />
+                <div className="h-4 w-20 bg-[var(--color-border)] rounded" />
+                <div className="h-6 w-16 bg-[var(--color-border)] rounded-full" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }

@@ -16,6 +16,8 @@ import {
   FileText,
   Target,
   Video,
+  AlertTriangle,
+  RefreshCw,
 } from 'lucide-react'
 import { useCreateStore } from '../stores/createStore'
 import type {
@@ -62,9 +64,11 @@ export default function Create() {
     setProductInfo,
     progress,
     isGenerating,
+    errorMessage,
     result,
     goToStep,
     startGeneration,
+    retryGeneration,
     reset,
   } = useCreateStore()
 
@@ -100,7 +104,7 @@ export default function Create() {
         {currentStep > 1 && (
           <button
             onClick={handleReset}
-            className="p-2 rounded-lg hover:bg-[var(--color-bg)] transition-colors text-[var(--color-text-muted)]"
+            className="p-3 rounded-lg hover:bg-[var(--color-bg)] transition-colors text-[var(--color-text-muted)]"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
@@ -131,10 +135,21 @@ export default function Create() {
           <Step2Progress
             progress={progress}
             isGenerating={isGenerating}
+            errorMessage={errorMessage}
+            onRetry={retryGeneration}
+            onReset={handleReset}
           />
         )}
         {currentStep === 3 && result && (
           <Step3Results result={result} />
+        )}
+        {currentStep === 3 && !result && (
+          <div className="flex items-center justify-center h-64">
+            <div className="text-center">
+              <Loader2 className="w-8 h-8 text-[var(--color-primary)] animate-spin mx-auto mb-3" />
+              <p className="text-sm text-[var(--color-text-muted)]">正在加载结果...</p>
+            </div>
+          </div>
         )}
       </div>
     </div>
@@ -359,17 +374,35 @@ const STEP_LIST = [
 function Step2Progress({
   progress,
   isGenerating,
+  errorMessage,
+  onRetry,
+  onReset,
 }: {
   progress: ReturnType<typeof useCreateStore.getState>['progress']
   isGenerating: boolean
+  errorMessage: string | null
+  onRetry: () => void
+  onReset: () => void
 }) {
+  const isFailed = progress?.status === 'failed'
+
   return (
     <div className="max-w-2xl mx-auto py-8">
-      {/* Loading Animation */}
+      {/* Status Icon */}
       <div className="flex justify-center mb-10">
         <div className="relative">
-          <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-[var(--color-primary)] to-purple-500 flex items-center justify-center animate-pulse-glow">
-            {isGenerating ? (
+          <div
+            className={`w-24 h-24 rounded-2xl flex items-center justify-center transition-all duration-500 ${
+              isFailed
+                ? 'bg-gradient-to-br from-red-500 to-rose-500 shadow-lg shadow-red-500/20'
+                : isGenerating
+                ? 'bg-gradient-to-br from-[var(--color-primary)] to-purple-500 animate-pulse-glow'
+                : 'bg-gradient-to-br from-emerald-500 to-teal-500'
+            }`}
+          >
+            {isFailed ? (
+              <AlertTriangle className="w-12 h-12 text-white" />
+            ) : isGenerating ? (
               <Loader2 className="w-12 h-12 text-white animate-spin" />
             ) : (
               <CheckCircle2 className="w-12 h-12 text-white" />
@@ -379,14 +412,54 @@ function Step2Progress({
       </div>
 
       {/* Status Message */}
-      <p className="text-center text-lg font-medium text-[var(--color-text)] mb-8">
+      <p
+        className={`text-center text-lg font-medium mb-4 ${
+          isFailed ? 'text-[var(--color-danger)]' : 'text-[var(--color-text)]'
+        }`}
+      >
         {progress?.message || (isGenerating ? '准备中...' : '生成完成')}
       </p>
+
+      {/* Error Actions */}
+      {isFailed && (
+        <div className="flex items-center justify-center gap-3 mb-8">
+          <button
+            onClick={onRetry}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-gradient-to-r from-[var(--color-primary)] to-purple-500 text-white text-sm font-medium hover:shadow-lg hover:scale-[1.02] transition-all duration-200"
+          >
+            <RefreshCw className="w-4 h-4" />
+            重试
+          </button>
+          <button
+            onClick={onReset}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-lg border border-[var(--color-border)] text-[var(--color-text-muted)] text-sm font-medium hover:text-[var(--color-text)] hover:border-[var(--color-text-muted)] transition-all duration-200"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            返回修改
+          </button>
+        </div>
+      )}
+
+      {/* Error Detail (axios error only) */}
+      {isFailed && errorMessage && (
+        <div className="mb-6 p-4 rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800/30">
+          <p className="text-sm text-red-700 dark:text-red-400 break-all">
+            {errorMessage}
+          </p>
+        </div>
+      )}
 
       {/* Progress Steps */}
       <div className="space-y-0">
         {STEP_LIST.map((step, i) => {
-          const status = progress?.steps[step.key] || 'waiting'
+          const hasStep = progress?.steps && step.key in progress.steps
+          if (import.meta.env.DEV && progress?.steps && !hasStep) {
+            console.warn(
+              `[Step2Progress] 步骤键 "${step.key}" 不在后端返回的 steps 中。` +
+              `后端返回的键: [${Object.keys(progress.steps).join(', ')}]`
+            )
+          }
+          const status = hasStep ? progress!.steps[step.key] : 'waiting'
           return (
             <div key={step.key} className="relative flex items-start gap-4">
               {/* Connector line */}
@@ -401,6 +474,8 @@ function Step2Progress({
                     ? 'bg-emerald-500 text-white'
                     : status === 'active'
                     ? 'bg-[var(--color-primary)] text-white animate-pulse-glow'
+                    : status === 'error'
+                    ? 'bg-red-500 text-white'
                     : 'bg-[var(--color-border)] text-[var(--color-text-muted)]'
                 }`}
               >
@@ -408,6 +483,8 @@ function Step2Progress({
                   <CheckCircle2 className="w-5 h-5" />
                 ) : status === 'active' ? (
                   <Loader2 className="w-5 h-5 animate-spin" />
+                ) : status === 'error' ? (
+                  <AlertTriangle className="w-4 h-4" />
                 ) : (
                   <Clock className="w-4 h-4" />
                 )}
@@ -421,6 +498,8 @@ function Step2Progress({
                       ? 'text-emerald-600 dark:text-emerald-400'
                       : status === 'active'
                       ? 'text-[var(--color-primary)]'
+                      : status === 'error'
+                      ? 'text-red-600 dark:text-red-400'
                       : 'text-[var(--color-text-muted)]'
                   }`}
                 >
@@ -537,7 +616,11 @@ function TabButton({
 function VideoTab({ videos }: { videos: VideoResult[] }) {
   const [activePlatform, setActivePlatform] = useState(videos[0]?.platform || 'TikTok')
   const [isPlaying, setIsPlaying] = useState(false)
+  const [videoError, setVideoError] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
+
+  // 切换平台时重置错误状态
+  useEffect(() => setVideoError(false), [activePlatform])
 
   const currentVideo = videos.find((v) => v.platform === activePlatform) || videos[0]
 
@@ -562,6 +645,14 @@ function VideoTab({ videos }: { videos: VideoResult[] }) {
       {/* Video Player */}
       <div className="lg:col-span-2 rounded-xl bg-[var(--color-bg-card)] border border-[var(--color-border)] overflow-hidden">
         <div className="relative bg-black aspect-video flex items-center justify-center group">
+          {videoError ? (
+            <div className="text-center text-white/70 p-4">
+              <AlertTriangle className="w-10 h-10 mx-auto mb-2 opacity-50" />
+              <p className="text-sm">视频加载失败</p>
+              <p className="text-xs text-white/40 mt-1">Mock 模式下示例视频不可用时出现此提示</p>
+            </div>
+          ) : (
+            <>
           <video
             ref={videoRef}
             src={currentVideo.url}
@@ -569,6 +660,7 @@ function VideoTab({ videos }: { videos: VideoResult[] }) {
             onEnded={() => setIsPlaying(false)}
             onPlay={() => setIsPlaying(true)}
             onPause={() => setIsPlaying(false)}
+            onError={() => { setIsPlaying(false); setVideoError(true) }}
           />
           {/* Play overlay */}
           {!isPlaying && (
@@ -585,26 +677,28 @@ function VideoTab({ videos }: { videos: VideoResult[] }) {
           <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/70 to-transparent flex items-center justify-between opacity-0 group-hover:opacity-100 transition-opacity">
             <button
               onClick={togglePlay}
-              className="text-white p-1.5 rounded-full hover:bg-white/20 transition-colors"
+              className="text-white p-2 rounded-full hover:bg-white/20 transition-colors"
             >
               {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
             </button>
             <div className="flex items-center gap-2">
               <button
                 onClick={handleFullscreen}
-                className="text-white p-1.5 rounded-full hover:bg-white/20 transition-colors"
+                className="text-white p-2 rounded-full hover:bg-white/20 transition-colors"
               >
                 <Maximize2 className="w-4 h-4" />
               </button>
               <a
                 href={currentVideo.url}
                 download
-                className="text-white p-1.5 rounded-full hover:bg-white/20 transition-colors"
+                className="text-white p-2 rounded-full hover:bg-white/20 transition-colors"
               >
                 <Download className="w-4 h-4" />
               </a>
             </div>
           </div>
+            </>
+          )}
         </div>
         <div className="p-4">
           <h3 className="font-medium text-[var(--color-text)]">
@@ -683,11 +777,21 @@ function CopyCard({
 }) {
   const [copied, setCopied] = useState(false)
 
+  useEffect(() => {
+    if (!copied) return
+    const timer = setTimeout(() => setCopied(false), 2000)
+    return () => clearTimeout(timer)
+  }, [copied])
+
   const handleCopy = async () => {
     const text = `${copy.content}\n\n${copy.hashtags.map((t) => '#' + t).join(' ')}`
-    await navigator.clipboard.writeText(text)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+    } catch {
+      // Clipboard API 不可用（HTTP 环境/权限被拒），静默降级
+      console.warn('[CopyCard] clipboard.writeText failed')
+    }
   }
 
   return (

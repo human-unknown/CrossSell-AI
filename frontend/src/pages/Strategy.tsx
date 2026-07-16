@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   Star,
   TrendingUp,
@@ -8,6 +9,7 @@ import {
   ChevronDown,
   PieChartIcon,
   Radio,
+  Video,
 } from 'lucide-react'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts'
 import { getTasks, getStrategyData } from '../services/api'
@@ -35,12 +37,14 @@ const CHANNEL_BG: Record<string, string> = {
 // ============ Page ============
 
 export default function Strategy() {
+  const navigate = useNavigate()
   const [tasks, setTasks] = useState<TaskRecord[]>([])
   const [selectedTaskId, setSelectedTaskId] = useState<string>('')
   const [strategyData, setStrategyData] = useState<StrategyData | null>(null)
   const [loading, setLoading] = useState(true)
   const [dataLoading, setDataLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const abortRef = useRef<AbortController | null>(null)
 
   // 加载产品列表
   useEffect(() => {
@@ -66,6 +70,11 @@ export default function Strategy() {
 
   // 选中产品变化 → 加载策略数据
   useEffect(() => {
+    // 取消上一次未完成的请求
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+
     if (!selectedTaskId) {
       setStrategyData(null)
       return
@@ -75,13 +84,18 @@ export default function Strategy() {
       setError(null)
       try {
         const data = await getStrategyData(selectedTaskId)
-        setStrategyData(data)
+        if (!controller.signal.aborted) {
+          setStrategyData(data)
+        }
       } catch (err) {
+        if (controller.signal.aborted) return
         console.error('[Strategy] Failed to load strategy:', err)
         setError('加载策略数据失败，请稍后重试')
         setStrategyData(null)
       } finally {
-        setDataLoading(false)
+        if (!controller.signal.aborted) {
+          setDataLoading(false)
+        }
       }
     }
     fetchStrategy()
@@ -90,14 +104,60 @@ export default function Strategy() {
   // ---- 加载中 ----
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <div className="w-8 h-8 border-3 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" />
+      <div className="space-y-6 animate-fade-in-up">
+        <PageHeader />
+        {/* 选择器骨架屏 */}
+        <div className="rounded-xl bg-[var(--color-bg-card)] border border-[var(--color-border)] p-4">
+          <div className="flex items-center gap-3">
+            <div className="h-5 w-16 bg-[var(--color-border)] rounded animate-pulse" />
+            <div className="h-10 w-48 bg-[var(--color-border)] rounded-lg animate-pulse" />
+            <div className="h-4 w-32 bg-[var(--color-border)] rounded animate-pulse" />
+          </div>
+        </div>
+        {/* 内容骨架屏 */}
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+          <div className="lg:col-span-3 space-y-4">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="rounded-xl bg-[var(--color-bg-card)] border border-[var(--color-border)] p-5 animate-pulse">
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-[var(--color-border)] rounded-lg" />
+                    <div>
+                      <div className="h-5 w-24 bg-[var(--color-border)] rounded mb-2" />
+                      <div className="h-3 w-16 bg-[var(--color-border)] rounded" />
+                    </div>
+                  </div>
+                  <div className="h-6 w-12 bg-[var(--color-border)] rounded-full" />
+                </div>
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  <div className="h-14 bg-[var(--color-border)] rounded-lg" />
+                  <div className="h-14 bg-[var(--color-border)] rounded-lg" />
+                </div>
+                <div className="h-4 w-full bg-[var(--color-border)] rounded" />
+              </div>
+            ))}
+          </div>
+          <div className="lg:col-span-2 space-y-6">
+            <div className="rounded-xl bg-[var(--color-bg-card)] border border-[var(--color-border)] p-5 animate-pulse">
+              <div className="h-4 w-20 bg-[var(--color-border)] rounded mb-4" />
+              <div className="h-56 bg-[var(--color-border)] rounded-lg" />
+            </div>
+            <div className="rounded-xl bg-[var(--color-bg-card)] border border-[var(--color-border)] p-5 animate-pulse">
+              <div className="h-4 w-20 bg-[var(--color-border)] rounded mb-4" />
+              <div className="space-y-3">
+                {[1, 2, 3, 4].map((i) => (
+                  <div key={i} className="h-4 bg-[var(--color-border)] rounded" style={{ width: `${85 - i * 8}%` }} />
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     )
   }
 
-  // ---- 加载出错 ----
-  if (error && tasks.length === 0) {
+  // ---- 加载出错（任务列表完全失败） ----
+  if (error && tasks.length === 0 && !loading) {
     return (
       <div className="space-y-6">
         <PageHeader />
@@ -108,7 +168,7 @@ export default function Strategy() {
           <p className="text-lg font-medium text-[var(--color-text)]">{error}</p>
           <button
             onClick={() => window.location.reload()}
-            className="mt-4 px-4 py-2 text-sm bg-[var(--color-primary)] text-white rounded-lg hover:opacity-90 transition-opacity"
+            className="mt-4 px-4 py-2 text-sm bg-[var(--color-primary)] text-white rounded-lg hover:shadow-md hover:scale-[1.01] transition-all duration-200"
           >
             重新加载
           </button>
@@ -130,6 +190,13 @@ export default function Strategy() {
           <p className="text-sm text-[var(--color-text-muted)] mt-1">
             请先在「内容生成」页面完成至少一个任务
           </p>
+          <button
+            onClick={() => navigate('/create')}
+            className="mt-6 inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-gradient-to-r from-[var(--color-primary)] to-purple-500 text-white text-sm font-medium hover:shadow-lg hover:scale-[1.02] transition-all duration-200"
+          >
+            <Video className="w-4 h-4" />
+            去生成内容
+          </button>
         </div>
       </div>
     )
@@ -174,6 +241,10 @@ export default function Strategy() {
         <div className="flex items-center justify-center h-64">
           <div className="w-8 h-8 border-3 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" />
         </div>
+      ) : error && !dataLoading ? (
+        <div className="rounded-xl bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800/30 p-4">
+          <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
+        </div>
       ) : strategyData ? (
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
           {/* 左栏：渠道卡片 (3/5) */}
@@ -212,13 +283,7 @@ export default function Strategy() {
                       ))}
                     </Pie>
                     <Tooltip
-                      contentStyle={{
-                        borderRadius: '12px',
-                        border: '1px solid var(--color-border)',
-                        background: 'var(--color-bg-card)',
-                        color: 'var(--color-text)',
-                      }}
-                      formatter={(_v: unknown) => [`${_v}%`, '预算占比']}
+                      content={<CustomPieTooltip />}
                     />
                     <Legend
                       formatter={(value: string) => (
@@ -297,6 +362,48 @@ function SectionTitle({
   )
 }
 
+// ---------- 自定义饼图 Tooltip ----------
+
+function CustomPieTooltip({
+  active,
+  payload,
+}: {
+  active?: boolean
+  payload?: Array<{ name: string; value: number; payload: { name: string; value: number } }>
+}) {
+  if (!active || !payload?.length) return null
+
+  const { name, value } = payload[0]
+  const total = 100 // 总预算基准 $100
+  const dollarAmount = Math.round((value / 100) * total)
+
+  return (
+    <div
+      style={{
+        borderRadius: '12px',
+        border: '1px solid var(--color-border)',
+        background: 'var(--color-bg-card)',
+        color: 'var(--color-text)',
+        padding: '10px 14px',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+      }}
+    >
+      <p className="font-semibold text-sm">{name}</p>
+      <div className="flex items-center gap-3 mt-1.5">
+        <span className="text-[var(--color-primary)] font-bold text-lg">
+          {value}%
+        </span>
+        <span className="text-xs text-[var(--color-text-muted)]">
+          预算占比
+        </span>
+      </div>
+      <p className="text-xs text-[var(--color-text-muted)] mt-1">
+        建议约 <span className="font-medium text-[var(--color-text)]">${dollarAmount}</span> / 天
+      </p>
+    </div>
+  )
+}
+
 function ChannelCard({
   channel,
   index,
@@ -310,7 +417,7 @@ function ChannelCard({
 
   return (
     <div
-      className={`rounded-xl border border-[var(--color-border)] overflow-hidden hover:shadow-md transition-shadow ${bg}`}
+      className={`rounded-xl border border-[var(--color-border)] overflow-hidden transition-all duration-300 hover:scale-[1.02] hover:shadow-lg hover:-translate-y-0.5 ${bg}`}
     >
       <div className="p-5">
         {/* Header */}

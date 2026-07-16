@@ -11,7 +11,6 @@
 
 import asyncio
 import logging
-import tempfile
 import shutil
 from pathlib import Path
 
@@ -90,7 +89,7 @@ class VideoComposer:
         total_duration = sum(actual_durations)
 
         # 构建 filtergraph
-        filter_parts = await self._build_filtergraph(
+        filter_parts = self._build_filtergraph(
             images=images,
             durations=actual_durations,
             spec=spec,
@@ -103,7 +102,6 @@ class VideoComposer:
             images=images,
             audio_path=audio_path,
             filter_parts=filter_parts,
-            spec=spec,
             output_path=output_path,
             logo_path=logo_path,
         )
@@ -115,7 +113,7 @@ class VideoComposer:
     # Filtergraph 构建
     # ------------------------------------------------------------------
 
-    async def _build_filtergraph(
+    def _build_filtergraph(
         self,
         images: list[Path],
         durations: list[float],
@@ -123,18 +121,27 @@ class VideoComposer:
         scene_subtitles: list[str] | None = None,
         logo_path: Path | str | None = None,
     ) -> str:
-        """构建 FFmpeg complex filtergraph"""
+        """
+        构建 FFmpeg complex filtergraph
+
+        管线（修复 subtitle timing）:
+          image[n] → scale+pad+fps → [v_n]
+            → (可选) drawtext → [s_n]     ← 字幕在 xfade 之前！
+          [s_0]...[s_n] → xfade → fade → (可选) overlay logo → [outv]
+        """
 
         w, h = spec["width"], spec["height"]
         fps = spec["fps"]
         n = len(images)
+        subs = scene_subtitles or []
 
         filters: list[str] = []
 
-        # ==== 步骤 1: 每张图 → 缩放 + 居中 pad + 设置显示时长 ====
-        padded: list[str] = []
+        # ==== 步骤 1: 每张图 → 缩放 + pad + fps + (字幕) ====
+        scene_tags: list[str] = []
         for i in range(n):
-            tag = f"v{i}"
+            raw_tag = f"raw{i}"
+            # 基础变换
             filters.append(
                 f"[{i}:v]"
                 f"scale={w}:{h}:force_original_aspect_ratio=decrease,"
@@ -142,24 +149,44 @@ class VideoComposer:
                 f"setsar=1,"
                 f"fps={fps},"
                 f"format=yuv420p"
-                f"[{tag}]"
+                f"[{raw_tag}]"
             )
-            padded.append(tag)
 
-        # ==== 步骤 2: 场景间 crossfade + 全局淡入淡出 ====
-        merged = padded[0]
+            # 如果该场景有字幕，叠加到当前流上（无 enable — 字幕持续整个场景）
+            if i < len(subs) and subs[i].strip():
+                safe = self._escape_drawtext(subs[i])
+                subbed_tag = f"s{i}"
+                filters.append(
+                    f"[{raw_tag}]"
+                    f"drawtext="
+                    f"text='{safe}':"
+                    f"fontsize={self.SUBTITLE_FONTSIZE}:"
+                    f"fontcolor={self.SUBTITLE_FONTCOLOR}:"
+                    f"bordercolor={self.SUBTITLE_BORDER_COLOR}:"
+                    f"borderw={self.SUBTITLE_BORDER_WIDTH}:"
+                    f"x=(w-text_w)/2:"
+                    f"y=h-th-60"
+                    f"[{subbed_tag}]"
+                )
+                scene_tags.append(subbed_tag)
+            else:
+                scene_tags.append(raw_tag)
+
+        # ==== 步骤 2: 场景间 crossfade ====
+        merged = scene_tags[0]
         for i in range(1, n):
             next_tag = f"merged_{i}"
             offset = sum(durations[:i]) - self.CROSSFADE_DURATION
             filters.append(
-                f"[{merged}][{padded[i]}]"
+                f"[{merged}][{scene_tags[i]}]"
                 f"xfade=transition=fade:duration={self.CROSSFADE_DURATION}:offset={max(offset, 0.5)}"
                 f"[{next_tag}]"
             )
             merged = next_tag
 
-        # 全局淡入淡出
-        fade_end = sum(durations) - self.FADE_DURATION
+        # ==== 步骤 3: 全局淡入淡出 ====
+        total = sum(durations)
+        fade_end = total - self.FADE_DURATION - self.CROSSFADE_DURATION * (n - 1)
         filters.append(
             f"[{merged}]"
             f"fade=t=in:d={self.FADE_DURATION},"
@@ -168,80 +195,33 @@ class VideoComposer:
         )
         current_stream = "faded"
 
-        # ==== 步骤 3: 逐场景字幕 ====
-        if scene_subtitles:
-            subtitle_filters = self._build_subtitle_filters(
-                durations=durations,
-                subtitles=scene_subtitles,
-                w=w, h=h,
-            )
-            if subtitle_filters:
-                # 把上一个输出加上字幕
-                for i, sf in enumerate(subtitle_filters):
-                    out_tag = f"subbed_{i}" if i < len(subtitle_filters) - 1 else "subbed"
-                    filters.append(f"[{current_stream}]{sf}[{out_tag}]")
-                    current_stream = out_tag
-
         # ==== 步骤 4: Logo 水印 ====
         if logo_path:
             logo_tag = f"[{n}:v]"
-            wm_y = h - 40
             filters.append(
                 f"[{current_stream}]{logo_tag}"
-                f"overlay=W-w-20:{wm_y}-overlay_h:format=auto,"
+                f"overlay=W-w-20:H-h-40:format=auto,"
                 f"format=yuv420p"
                 f"[watermarked]"
             )
             current_stream = "watermarked"
 
-        # 最终输出标签
+        # 最终输出
         filters.append(f"[{current_stream}]format=yuv420p[outv]")
 
         return ";".join(filters)
 
-    def _build_subtitle_filters(
-        self,
-        durations: list[float],
-        subtitles: list[str],
-        w: int,
-        h: int,
-    ) -> list[str]:
-        """为每个场景构建 drawtext filter，带 enable 时间条件"""
-
-        filters = []
-        elapsed = 0.0
-
-        for i, text in enumerate(subtitles):
-            if not text or not text.strip():
-                elapsed += durations[i]
-                continue
-
-            start_t = elapsed
-            end_t = elapsed + durations[i]
-            elapsed = end_t
-
-            # 转义特殊字符
-            safe_text = (
-                text.replace("\\", "\\\\")
-                .replace(":", "\\:")
-                .replace("'", "\\'")
-            )
-
-            # 字幕放在底部，居中
-            draw = (
-                f"drawtext="
-                f"text='{safe_text}':"
-                f"fontsize={self.SUBTITLE_FONTSIZE}:"
-                f"fontcolor={self.SUBTITLE_FONTCOLOR}:"
-                f"bordercolor={self.SUBTITLE_BORDER_COLOR}:"
-                f"borderw={self.SUBTITLE_BORDER_WIDTH}:"
-                f"x=(w-text_w)/2:"
-                f"y=h-th-60:"
-                f"enable='between(t,{start_t},{end_t})'"
-            )
-            filters.append(draw)
-
-        return filters
+    @staticmethod
+    def _escape_drawtext(text: str) -> str:
+        """转义 drawtext filter 中的特殊字符"""
+        return (
+            text.replace("\\", "\\\\")
+            .replace(":", "\\:")
+            .replace("'", "\\'")
+            .replace("%", "\\%")
+            .replace("{", "\\{")
+            .replace("}", "\\}")
+        )
 
     # ------------------------------------------------------------------
     # 命令构建 & 执行
@@ -252,7 +232,6 @@ class VideoComposer:
         images: list[Path],
         audio_path: Path,
         filter_parts: str,
-        spec: dict,
         output_path: Path,
         logo_path: Path | str | None = None,
     ) -> list[str]:

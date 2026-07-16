@@ -18,13 +18,20 @@ export default function Dashboard() {
   const [stats, setStats] = useState<WeeklyStats | null>(null)
   const [tasks, setTasks] = useState<TaskRecord[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     async function fetchData() {
-      const [s, t] = await Promise.all([getWeeklyStats(), getTasks(1, 5)])
-      setStats(s)
-      setTasks(t.tasks)
-      setLoading(false)
+      try {
+        const [s, t] = await Promise.all([getWeeklyStats(), getTasks(1, 5)])
+        setStats(s)
+        setTasks(t.tasks)
+      } catch (err) {
+        console.error('[Dashboard] Failed to load data:', err)
+        setError('加载数据失败，请检查网络连接')
+      } finally {
+        setLoading(false)
+      }
     }
     fetchData()
   }, [])
@@ -33,6 +40,29 @@ export default function Dashboard() {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="w-8 h-8 border-3 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-6 animate-fade-in-up">
+        <div>
+          <h1 className="text-2xl font-bold text-[var(--color-text)]">工作台</h1>
+          <p className="text-[var(--color-text-muted)] mt-1">欢迎回来，查看你的内容营销概览</p>
+        </div>
+        <div className="rounded-xl bg-[var(--color-bg-card)] border border-[var(--color-border)] p-12 text-center">
+          <div className="w-12 h-12 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-3">
+            <span className="text-2xl">⚠️</span>
+          </div>
+          <p className="text-lg font-medium text-[var(--color-text)]">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="mt-4 px-4 py-2 text-sm bg-[var(--color-primary)] text-white rounded-lg hover:shadow-md hover:scale-[1.01] transition-all duration-200"
+          >
+            重新加载
+          </button>
+        </div>
       </div>
     )
   }
@@ -77,7 +107,7 @@ export default function Dashboard() {
       {/* Quick Start Card */}
       <div
         onClick={() => navigate('/create')}
-        className="group relative overflow-hidden rounded-xl bg-gradient-to-r from-[var(--color-primary)] via-purple-500 to-pink-500 p-6 text-white cursor-pointer transition-all duration-300 hover:shadow-xl hover:scale-[1.01]"
+        className="group relative overflow-hidden rounded-xl bg-gradient-to-r from-[var(--color-primary)] via-purple-500 to-pink-500 p-6 text-white cursor-pointer transition-all duration-300 hover:shadow-xl hover:scale-[1.02]"
       >
         <div className="absolute inset-0 bg-black/10 group-hover:bg-black/0 transition-colors" />
         <div className="relative z-10 flex items-center justify-between">
@@ -99,12 +129,6 @@ export default function Dashboard() {
       <div className="rounded-xl bg-[var(--color-bg-card)] border border-[var(--color-border)] overflow-hidden">
         <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
           <h2 className="font-semibold text-[var(--color-text)]">最近任务</h2>
-          <button
-            onClick={() => navigate('/create')}
-            className="text-sm text-[var(--color-primary)] hover:underline flex items-center gap-1"
-          >
-            查看全部 <ArrowRight className="w-3 h-3" />
-          </button>
         </div>
         <div className="divide-y divide-[var(--color-border)]">
           {tasks.length === 0 ? (
