@@ -89,12 +89,13 @@ class VideoComposer:
         total_duration = sum(actual_durations)
 
         # 构建 filtergraph
-        filter_parts = self._build_filtergraph(
+        filter_parts, sub_files = self._build_filtergraph(
             images=images,
             durations=actual_durations,
             spec=spec,
             scene_subtitles=scene_subtitles,
             logo_path=logo_path,
+            output_base=output_path.parent,
         )
 
         # 构建 FFmpeg 命令
@@ -107,6 +108,14 @@ class VideoComposer:
         )
 
         await self._execute(cmd, output_path)
+
+        # 清理临时字幕文件
+        for f in sub_files:
+            try:
+                f.unlink(missing_ok=True)
+            except Exception:
+                pass
+
         return output_path
 
     # ------------------------------------------------------------------
@@ -120,7 +129,8 @@ class VideoComposer:
         spec: dict,
         scene_subtitles: list[str] | None = None,
         logo_path: Path | str | None = None,
-    ) -> str:
+        output_base: Path | None = None,
+    ) -> tuple[str, list[Path]]:
         """
         构建 FFmpeg complex filtergraph
 
@@ -139,6 +149,8 @@ class VideoComposer:
 
         # ==== 步骤 1: 每张图 → 缩放 + pad + fps + (字幕) ====
         scene_tags: list[str] = []
+        subtitle_files: list[Path] = []  # 记录所有临时字幕文件，compose 结束时清理
+
         for i in range(n):
             raw_tag = f"raw{i}"
             # 基础变换
@@ -152,14 +164,19 @@ class VideoComposer:
                 f"[{raw_tag}]"
             )
 
-            # 如果该场景有字幕，叠加到当前流上（无 enable — 字幕持续整个场景）
+            # 字幕：写入临时文件，用 textfile 引用（彻底避免转义问题）
             if i < len(subs) and subs[i].strip():
-                safe = self._escape_drawtext(subs[i])
                 subbed_tag = f"s{i}"
+                # 写入临时文件（UTF-8，无 BOM）
+                sub_file = output_base / f"_sub_{i}.txt" if output_base else Path(f"_sub_{i}.txt")
+                sub_file.write_text(subs[i].strip(), encoding="utf-8")
+                subtitle_files.append(sub_file)
+                # 用正斜杠防止 Windows 路径反斜杠被 FFmpeg 误解析
+                safe_path = str(sub_file).replace("\\", "/")
                 filters.append(
                     f"[{raw_tag}]"
                     f"drawtext="
-                    f"text='{safe}':"
+                    f"textfile='{safe_path}':"
                     f"fontsize={self.SUBTITLE_FONTSIZE}:"
                     f"fontcolor={self.SUBTITLE_FONTCOLOR}:"
                     f"bordercolor={self.SUBTITLE_BORDER_COLOR}:"
@@ -209,20 +226,13 @@ class VideoComposer:
         # 最终输出
         filters.append(f"[{current_stream}]format=yuv420p[outv]")
 
-        return ";".join(filters)
+        return ";".join(filters), subtitle_files
 
     @staticmethod
     def _escape_drawtext(text: str) -> str:
-        """转义 drawtext filter 中的特殊字符"""
-        return (
-            text.replace("\\", "\\\\")
-            .replace(":", "\\:")
-            .replace(",", "\\,")
-            .replace("'", "\\'")
-            .replace("%", "\\%")
-            .replace("{", "\\{")
-            .replace("}", "\\}")
-        )
+        """清理字幕文本中的危险字符（改用 textfile 方案后只需清理换行符）"""
+        # 移除换行符和控制字符，保留其他所有内容
+        return text.replace("\n", " ").replace("\r", "").replace("\t", " ")
 
     # ------------------------------------------------------------------
     # 命令构建 & 执行
