@@ -178,8 +178,33 @@ class VideoComposer:
 _composer: VideoComposer | None = None
 
 
+def _find_ffmpeg() -> str:
+    """Auto-detect FFmpeg binary location."""
+    import shutil
+    # 1. 优先从系统 PATH 查找
+    system_ffmpeg = shutil.which("ffmpeg")
+    if system_ffmpeg:
+        return system_ffmpeg
+    # 2. 尝试 WorkBuddy 托管的二进制
+    from pathlib import Path
+    managed = Path.home() / ".workbuddy" / "binaries" / "ffmpeg" / "ffmpeg.exe"
+    if managed.exists():
+        return str(managed)
+    # 3. 常见安装路径
+    for candidate in [
+        r"C:\ffmpeg\bin\ffmpeg.exe",
+        r"C:\Program Files\ffmpeg\bin\ffmpeg.exe",
+    ]:
+        if Path(candidate).exists():
+            return candidate
+    # 4. 回退默认名
+    return "ffmpeg"
+
+
 def get_video_composer() -> VideoComposer:
     global _composer
     if _composer is None:
-        _composer = VideoComposer()
+        path = _find_ffmpeg()
+        logger.info(f"FFmpeg detected at: {path}")
+        _composer = VideoComposer(ffmpeg_path=path)
     return _composer
