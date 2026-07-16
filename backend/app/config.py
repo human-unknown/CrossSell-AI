@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     FAST_TEXT_MODEL: str = "qwen-turbo"   # 快速原型验证
     REASONING_MODEL: str = "deepseek-r1"  # 复杂策略分析
     TTS_MODEL: str = "cosyvoice-v1"       # 语音合成（需达摩院原生API）
-    IMAGE_MODEL: str = "wan2.1-t2i-turbo" # 图片生成（需达摩院原生API）
+    IMAGE_MODEL: str = "wanx2.1-t2i-turbo" # 图片生成（需达摩院原生API）
     VIDEO_MODEL: str = "wan2.1-t2v-turbo" # 视频生成（需达摩院原生API）
     VISION_MODEL: str = "qwen-vl-plus"    # 视觉理解
 

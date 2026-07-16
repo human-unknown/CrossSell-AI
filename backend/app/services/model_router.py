@@ -32,7 +32,12 @@ class ModelRouterError(Exception):
 
 
 class ModelRouterClient:
-    """阿里云百炼 Model Router API 异步客户端"""
+    """阿里云百炼 Model Router API 异步客户端
+
+    支持两种后端：
+    - 赛方 Model Router (model-router.edu-aliyun.com): OpenAI 兼容协议，126模型
+    - 标准 DashScope (dashscope.aliyuncs.com): 原生协议，文本/图片/TTS/视频
+    """
 
     def __init__(self) -> None:
         self._base_url: str = settings.MODEL_ROUTER_BASE_URL
@@ -40,6 +45,7 @@ class ModelRouterClient:
         self._timeout: int = settings.REQUEST_TIMEOUT
         self._max_retries: int = settings.MAX_RETRIES
         self._retry_delay: float = settings.RETRY_DELAY
+        self._dashscope_native = "dashscope.aliyuncs.com" in self._base_url
 
     # ------------------------------------------------------------------
     # 内部方法
@@ -220,6 +226,39 @@ class ModelRouterClient:
             raise
 
     # ------------------------------------------------------------------
+    # DashScope 原生 API 请求（图片/TTS/视频走达摩院原生端点）
+    # ------------------------------------------------------------------
+
+    DASHSCOPE_HOST = "https://dashscope.aliyuncs.com"
+
+    async def _dashscope_request(
+        self, method: str, path: str, json_data: dict, extra_headers: dict | None = None
+    ) -> httpx.Response:
+        """向 DashScope 原生 API 发送请求（非 OpenAI 兼容端点）"""
+        url = f"{self.DASHSCOPE_HOST}{path}"
+        headers = {
+            "Authorization": f"Bearer {self._api_key}",
+            "Content-Type": "application/json",
+        }
+        if extra_headers:
+            headers.update(extra_headers)
+
+        for attempt in range(self._max_retries):
+            try:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(self._timeout)) as client:
+                    response = await client.request(method, url, json=json_data, headers=headers)
+                    if response.status_code < 500:
+                        return response
+                    logger.warning(f"DashScope {response.status_code} 第{attempt+1}/{self._max_retries}次重试")
+            except httpx.RequestError as e:
+                logger.warning(f"DashScope 请求失败: {e}")
+
+            if attempt < self._max_retries - 1:
+                await _async_sleep(self._retry_delay * (2 ** attempt))
+
+        raise ModelRouterError(f"DashScope 请求失败（已重试{self._max_retries}次）")
+
+    # ------------------------------------------------------------------
     # 图片生成
     # ------------------------------------------------------------------
 
@@ -233,17 +272,53 @@ class ModelRouterClient:
         """
         生成图片
 
+        Model Router: POST /v1/images/generations (同步)
+        DashScope 原生: POST /api/v1/services/aigc/text2image/image-synthesis (异步→轮询)
+
         Returns:
             图片 URL 列表
         """
         model = model or settings.IMAGE_MODEL
+
+        # DashScope 原生 API：异步提交 + 轮询
+        if self._dashscope_native:
+            dashscope_size = size.replace("x", "*")
+            payload = {
+                "model": model,
+                "input": {"prompt": prompt},
+                "parameters": {"size": dashscope_size, "n": n},
+            }
+            response = await self._dashscope_request(
+                "POST", "/api/v1/services/aigc/text2image/image-synthesis",
+                payload, extra_headers={"X-DashScope-Async": "enable"},
+            )
+            if response.status_code != 200:
+                raise ModelRouterError(f"图片生成失败: {response.text}", response.status_code)
+            data = response.json()
+            task_id = data.get("output", {}).get("task_id", "")
+            if not task_id:
+                raise ModelRouterError(f"未获取到 task_id: {response.text}")
+            # 轮询直到完成
+            for _ in range(60):
+                await _async_sleep(2)
+                poll_resp = await self._dashscope_request("GET", f"/api/v1/tasks/{task_id}", {})
+                if poll_resp.status_code == 200:
+                    pd = poll_resp.json()
+                    ts = pd.get("output", {}).get("task_status", "")
+                    if ts == "SUCCEEDED":
+                        results = pd.get("output", {}).get("results", [])
+                        return [r["url"] for r in results if "url" in r]
+                    elif ts == "FAILED":
+                        raise ModelRouterError(f"图片生成任务失败: {poll_resp.text}")
+            raise ModelRouterError("图片生成超时（等待120秒）")
+
+        # Model Router / OpenAI 兼容
         payload = {
             "model": model,
             "prompt": prompt,
             "n": n,
             "size": size,
         }
-
         response = await self._request_with_retry(
             "POST", "/images/generations", payload
         )
@@ -251,7 +326,6 @@ class ModelRouterClient:
             raise ModelRouterError(
                 f"图片生成失败: {response.text}", response.status_code
             )
-
         data = response.json()
         return [img["url"] for img in data.get("data", [])]
 
@@ -267,30 +341,55 @@ class ModelRouterClient:
         voice: str = "Chelsie",
     ) -> bytes:
         """
-        文本转语音 (POST /v1/audio/speech, OpenAI 兼容)
+        文本转语音
+
+        Model Router: POST /v1/audio/speech (OpenAI 兼容)
+        DashScope 原生: POST /api/v1/services/aigc/text2speech/synthesize
 
         Args:
-            voice: 音色名称，支持 Chelsie / Ethan / Serena
+            voice: DashScope 原生用 longxiaochun/longchen/longhua 等;
+                   Model Router 用 Chelsie/Ethan/Serena
 
         Returns:
             音频数据 (MP3 bytes)
         """
         model = model or settings.TTS_MODEL
+
+        # DashScope 原生 API
+        if self._dashscope_native:
+            dash_voice = {"Chelsie": "longxiaochun", "Ethan": "longchen", "Serena": "longhua"}.get(
+                voice, "longxiaochun"
+            )
+            # 根据 language 选择音色变体
+            tts_voice = f"{dash_voice}_en" if language == "en" else dash_voice
+            payload = {
+                "model": model,
+                "input": {"text": text},
+                "parameters": {"voice": tts_voice, "format": "mp3"},
+            }
+            response = await self._dashscope_request(
+                "POST", "/api/v1/services/aigc/text2speech/synthesize", payload
+            )
+            if response.status_code != 200:
+                raise ModelRouterError(f"TTS 生成失败: {response.text}", response.status_code)
+            data = response.json()
+            audio_url = data.get("output", {}).get("audio", {}).get("url", "")
+            if audio_url:
+                async with httpx.AsyncClient() as client:
+                    audio_resp = await client.get(audio_url)
+                    return audio_resp.content
+            raise ModelRouterError(f"TTS 未返回音频 URL: {response.text}")
+
+        # Model Router / OpenAI 兼容
         payload = {
             "model": model,
             "input": text,
             "language": language,
             "voice": voice,
         }
-
-        response = await self._request_with_retry(
-            "POST", "/audio/speech", payload
-        )
+        response = await self._request_with_retry("POST", "/audio/speech", payload)
         if response.status_code != 200:
-            raise ModelRouterError(
-                f"TTS 生成失败: {response.text}", response.status_code
-            )
-
+            raise ModelRouterError(f"TTS 生成失败: {response.text}", response.status_code)
         return response.content
 
     # ------------------------------------------------------------------
