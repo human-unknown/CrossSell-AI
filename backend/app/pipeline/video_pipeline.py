@@ -130,8 +130,11 @@ async def run_video_pipeline(
             try:
                 if image_paths and audio_path.exists():
                     composer = get_video_composer()
-                    scene_durations = [
-                        s.get("duration", 3) for s in script.get("scenes", [])
+                    scenes = script.get("scenes", [])
+                    # 截断到图片数量，避免 durations/subtitles 与 images 长度不匹配
+                    scene_durations = [s.get("duration", 3) for s in scenes[:len(image_paths)]]
+                    scene_subtitles = [
+                        s.get("audio", s.get("visual", "")) for s in scenes[:len(image_paths)]
                     ]
                     await composer.compose(
                         images=image_paths,
@@ -139,6 +142,7 @@ async def run_video_pipeline(
                         platform=platform,
                         output_path=video_path,
                         scene_durations=scene_durations if scene_durations else None,
+                        scene_subtitles=scene_subtitles if any(scene_subtitles) else None,
                     )
                     video_url = f"/output/{task_id}/{video_path.name}"
                 else:
