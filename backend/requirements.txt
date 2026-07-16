@@ -1,0 +1,35 @@
+# CrossSell AI — Python 依赖
+# 安装: pip install -r requirements.txt
+
+# Web 框架
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+
+# 数据库
+sqlalchemy[asyncio]==2.0.36
+aiosqlite==0.20.0
+
+# 数据验证
+pydantic==2.10.3
+pydantic-settings==2.7.0
+
+# HTTP 客户端（调用 Model Router API）
+httpx==0.28.1
+
+# 异步任务
+celery==5.4.0
+redis==5.2.1
+
+# 视频处理
+Pillow==11.1.0
+opencv-python==4.10.0.84
+
+# 环境变量管理
+python-dotenv==1.0.1
+
+# 测试
+pytest==8.3.4
+pytest-asyncio==0.25.0
+
+# 日志 / 监控
+structlog==24.4.0

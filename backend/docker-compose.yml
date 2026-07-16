@@ -1,0 +1,27 @@
+# CrossSell AI — Docker Compose
+# 启动: docker-compose up -d
+
+version: "3.9"
+
+services:
+  api:
+    build: .
+    container_name: crosssell-api
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=sqlite+aiosqlite:///./crosssell.db
+      - MODEL_ROUTER_API_KEY=${MODEL_ROUTER_API_KEY}
+      - DEBUG=false
+    volumes:
+      - ./output:/app/output
+      - ./crosssell.db:/app/crosssell.db
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: crosssell-redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    # 初赛阶段 Redis 可选（如用 BackgroundTasks 替代 Celery）
