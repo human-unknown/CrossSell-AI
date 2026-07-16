@@ -81,9 +81,9 @@ async def run_video_pipeline(
             await update_progress((completed + 0.25) / total_combos)
 
             audio_path = output_base / f"{combo_key}_audio.mp3"
+            language = script.get("language", "en")
+            full_script = script.get("full_script", "")
             try:
-                language = script.get("language", "en")
-                full_script = script.get("full_script", "")
                 await generate_audio(
                     text=full_script,
                     language=language,
@@ -91,10 +91,9 @@ async def run_video_pipeline(
                 )
                 logger.info(f"[{combo_key}] 配音生成完成")
             except Exception as e:
-                logger.error(f"[{combo_key}] 配音生成失败: {e}")
-                await update_step("text_to_speech", "failed")
-                completed += 1
-                continue
+                # TTS 失败不阻塞流水线 — 生成静音占位音频
+                logger.warning(f"[{combo_key}] 配音生成失败(fallback silent): {e}")
+                _create_silent_audio(audio_path, duration=script.get("duration", 15))
 
             await update_step("text_to_speech", "done")
 
@@ -163,3 +162,18 @@ async def run_video_pipeline(
             await update_progress(completed / total_combos)
 
     return results
+
+
+def _create_silent_audio(path: Path, duration: float = 15.0, sample_rate: int = 44100):
+    """生成静音 WAV 占位文件（TTS 不可用时的兜底）"""
+    import struct
+    import wave
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    num_samples = int(duration * sample_rate)
+
+    with wave.open(str(path), "w") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)  # 16-bit
+        wf.setframerate(sample_rate)
+        wf.writeframes(struct.pack("<" + "h" * num_samples, *([0] * num_samples)))

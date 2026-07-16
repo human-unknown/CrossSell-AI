@@ -50,4 +50,13 @@ logs/
 .env.*.local
 
 # WorkBuddy
-.workbuddy/memory/
+.workbuddy/
+
+# Internal working documents (not part of the deliverable)
+deliverables/
+docs/
+Sprint*.md
+*对话_启动提示*.md
+AI+跨境*.md
+backend/API_*.md
+backend/README.md

@@ -81,10 +81,10 @@ async def get_task_result(task_id: str, db: AsyncSession = Depends(get_db)):
             FrontendVideoResult(
                 id=str(uuid.uuid4()),
                 platform=platform_label(p),
-                url=v.get("url", ""),
+                url=v.get("url") or "",
                 thumbnail="",
-                title=v.get("script", v.get("full_script", "")),
-                duration=v.get("duration", 0),
+                title=v.get("script") or v.get("full_script") or "",
+                duration=v.get("duration") or 0,
             )
         )
 
@@ -92,13 +92,14 @@ async def get_task_result(task_id: str, db: AsyncSession = Depends(get_db)):
     copies: list[FrontendCopyResult] = []
     for c in (result.copies if result else []):
         p = c.get("platform", "")
+        text = c.get("text") or ""
         copies.append(
             FrontendCopyResult(
                 id=str(uuid.uuid4()),
                 platform=platform_label(p),
-                content=c.get("text", ""),
-                hashtags=c.get("hashtags", []),
-                characterCount=c.get("character_count", len(c.get("text", ""))),
+                content=text,
+                hashtags=c.get("hashtags") or [],
+                characterCount=c.get("character_count") or len(text),
             )
         )
 
