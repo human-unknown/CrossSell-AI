@@ -168,11 +168,11 @@ class VideoComposer:
             if i < len(subs) and subs[i].strip():
                 subbed_tag = f"s{i}"
                 # 写入临时文件（UTF-8，无 BOM）
-                sub_file = output_base / f"_sub_{i}.txt" if output_base else Path(f"_sub_{i}.txt")
+                sub_file = (output_base or Path(".")) / f"_sub_{i}.txt"
                 sub_file.write_text(subs[i].strip(), encoding="utf-8")
                 subtitle_files.append(sub_file)
-                # 用正斜杠防止 Windows 路径反斜杠被 FFmpeg 误解析
-                safe_path = str(sub_file).replace("\\", "/")
+                # 转义冒号——FFmpeg filter 中 : 是参数分隔符，Windows 盘符需转义
+                safe_path = str(sub_file.resolve()).replace("\\", "/").replace(":", "\\:")
                 filters.append(
                     f"[{raw_tag}]"
                     f"drawtext="
