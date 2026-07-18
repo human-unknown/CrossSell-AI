@@ -1,4 +1,4 @@
-import { NavLink, useLocation } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard,
   Video,
@@ -21,6 +21,7 @@ const navItems = [
 ]
 
 export default function Sidebar() {
+  const navigate = useNavigate()
   const location = useLocation()
   const { isDark, toggle } = useThemeStore()
   const isMock = getApiMode() === 'mock'
@@ -28,6 +29,11 @@ export default function Sidebar() {
   const isActive = (path: string) => {
     if (path === '/') return location.pathname === '/'
     return location.pathname.startsWith(path)
+  }
+
+  const handleNav = (to: string, e: React.MouseEvent) => {
+    e.preventDefault()
+    navigate(to)
   }
 
   return (
@@ -42,24 +48,26 @@ export default function Sidebar() {
         </span>
       </div>
 
-      {/* Navigation */}
+      {/* Navigation — 使用 button 而非 NavLink/a 标签，避免 CloudStudio beacon SDK 拦截 */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-        {navItems.map(({ to, icon: Icon, label }) => (
-          <NavLink
-            key={to}
-            to={to}
-            className={({ isActive: active }) =>
-              `flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${
-                active || isActive(to)
+        {navItems.map(({ to, icon: Icon, label }) => {
+          const active = isActive(to)
+          return (
+            <button
+              key={to}
+              type="button"
+              onClick={(e) => handleNav(to, e)}
+              className={`flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium transition-all duration-200 w-full text-left ${
+                active
                   ? 'bg-[var(--color-primary)] text-white shadow-md shadow-purple-500/20'
                   : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg)]'
-              }`
-            }
-          >
-            <Icon className="w-5 h-5 shrink-0" />
-            <span>{label}</span>
-          </NavLink>
-        ))}
+              }`}
+            >
+              <Icon className="w-5 h-5 shrink-0" />
+              <span>{label}</span>
+            </button>
+          )
+        })}
       </nav>
 
       {/* Theme toggle */}

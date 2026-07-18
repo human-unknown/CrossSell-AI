@@ -92,8 +92,11 @@ async def run_video_pipeline(
                 logger.info(f"[{combo_key}] 配音生成完成")
             except Exception as e:
                 # TTS 失败不阻塞流水线 — 生成静音占位音频
-                logger.warning(f"[{combo_key}] 配音生成失败(fallback silent): {e}")
-                _create_silent_audio(audio_path, duration=script.get("duration", 15))
+                # 使用 script 中实际场景总时长，避免 15s 默认值导致黑屏
+                _scenes = script.get("scenes", [])
+                _fallback_dur = sum(s.get("duration", 3) for s in _scenes[:5]) if _scenes else 15.0
+                logger.warning(f"[{combo_key}] 配音生成失败(fallback BGM): {e}")
+                _create_bgm_audio(audio_path, duration=max(_fallback_dur, 5.0))
 
             await update_step("text_to_speech", "done")
 
@@ -181,3 +184,63 @@ def _create_silent_audio(path: Path, duration: float = 15.0, sample_rate: int = 
         wf.setsampwidth(2)  # 16-bit
         wf.setframerate(sample_rate)
         wf.writeframes(struct.pack("<" + "h" * num_samples, *([0] * num_samples)))
+
+
+def _create_bgm_audio(path: Path, duration: float = 15.0):
+    """生成柔和背景音 WAV（TTS 降级方案）。
+
+    优先用 FFmpeg sine 滤镜（带淡入淡出），
+    不可用时退回纯 Python 440Hz 正弦波生成。
+    """
+    import struct
+    import wave
+    import math
+    import subprocess
+    import shutil
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    ffmpeg = shutil.which("ffmpeg")
+    if ffmpeg:
+        try:
+            cmd = [
+                ffmpeg, "-y",
+                "-f", "lavfi",
+                "-i", f"sine=frequency=440:duration={duration}:sample_rate=44100",
+                "-af", f"volume=-18dB,afade=t=in:d=1,afade=t=out:d=1:st={max(duration - 1, 1)}",
+                "-ac", "1",
+                str(path),
+            ]
+            subprocess.run(cmd, capture_output=True, check=True, timeout=30)
+            if path.exists() and path.stat().st_size > 0:
+                logger.info(f"BGM 生成成功 (FFmpeg): {path} ({path.stat().st_size} bytes)")
+                return
+        except Exception:
+            logger.warning("FFmpeg BGM 失败，回退纯 Python 合成")
+
+    # ---- 纯 Python 正弦波（零外部依赖）----
+    sample_rate = 44100
+    num_samples = int(duration * sample_rate)
+    # 440Hz, 振幅 15%（≈ -16.5dB，不刺耳），带淡入淡出包络
+    fade_samples = int(1.0 * sample_rate)  # 1s 淡入/淡出
+
+    samples = []
+    for i in range(num_samples):
+        t = i / sample_rate
+        # 包络：前 fade_samples 线性淡入，后 fade_samples 线性淡出
+        if i < fade_samples:
+            envelope = i / fade_samples
+        elif i > num_samples - fade_samples:
+            envelope = (num_samples - i) / fade_samples
+        else:
+            envelope = 1.0
+        value = int(0.15 * 32767 * math.sin(2 * math.pi * 440 * t) * envelope)
+        samples.append(value)
+
+    with wave.open(str(path), "w") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(sample_rate)
+        wf.writeframes(struct.pack("<" + "h" * num_samples, *samples))
+
+    logger.info(f"BGM 生成成功 (Python): {path} ({path.stat().st_size} bytes)")

@@ -313,10 +313,18 @@ class VideoComposer:
         images: list[Path],
         scene_durations: list[float] | None,
     ) -> list[float]:
-        """确定每个场景的时长"""
+        """确定每个场景的时长，确保总时长匹配音频避免黑屏"""
         n = len(images)
 
         if scene_durations and len(scene_durations) == n:
+            # 安全兜底：如果场景总时长小于音频时长，拉伸最后一帧填补
+            if audio_path.exists():
+                audio_len = await self._get_audio_duration(audio_path)
+                scene_sum = sum(scene_durations)
+                if scene_sum < audio_len - 0.5:  # 差距大于0.5秒才修正
+                    durations = list(scene_durations)
+                    durations[-1] += (audio_len - scene_sum)
+                    return durations
             return list(scene_durations)
 
         if audio_path.exists():
